@@ -1,0 +1,37 @@
+# (Gentoo Linux) Global Configuration
+# vim:ai:noet:ts=4:nowrap:syntax=sh
+
+if test "$1" = "debug" -o "$1" = ""; then
+	export CFLAGS=" -g -DNDEBUG=1 -pipe"
+	export CFLAGS="-O0 -ggdb3 -pipe"
+	export CXXFLAGS="${CFLAGS}"
+	export DEBUG="yacsd:yacsadmin:yacs:character:chat:relationship:SQL:TNetClientSession:TApplication"
+	export PKG_CONFIG_PATH="/usr/local/sandbox/lib/pkgconfig:/opt/yacs/lib/pkgconfig:/usr/local/lib/pkgconfig"
+else
+	# importing system values
+	[ -f /etc/make.globals ] && source /etc/make.globals
+	[ -f /etc/make.conf ] && source /etc/make.conf
+	export CFLAGS="${CFLAGS} -DNDEBUG=1"
+	export CXXFLAGS="${CXXFLAGS} -DNDEBUG=1"
+	export PKG_CONFIG_PATH="/opt/optimized/lib/pkgconfig:/usr/local/lib/pkgconfig"
+fi
+
+if test x$1 = xmudflap; then
+	export CFLAGS="${CFLAGS} -fmudflapth -pthread"
+	export CXXFLAGS="${CXXFLAGS} -fmudflapth -pthread"
+	export LDFLAGS="-lmudflapth -lpthread"
+	export MUDFLAP_OPTIONS='-mode-check -mode-populate'
+fi
+
+# assume proper autotool versions
+#export WANT_AUTOCONF=2.5
+#export WANT_AUTOMAKE=1.10
+
+# add colorgcc to PATH
+if [ -d /usr/lib/colorgcc/bin ]; then
+	if ! echo ${PATH} | grep colorgcc/bin &>/dev/null; then
+		export PATH=/usr/lib/colorgcc/bin:${PATH}
+	fi
+fi
+
+ulimit -c unlimited
