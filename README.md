@@ -8,7 +8,7 @@ _desaster_ is a job queue manager and primarily inspired by _resque_ and it's we
 - queue management
   - queues should be managed via the UI
   - dynamically attach/detach queues from/to workers
-  - true and pluggable queing system (SFQ, HTB, ...)
+  - true and pluggable queueing system (SFQ, HTB, ...)
   - optional: automatically unique / set-based queues
   - list queue entries
     - searchable, sortable, filterable, paginated
