@@ -5,4 +5,5 @@ CMakeFiles
 Makefile
 cmake_install.cmake
 config.h
-lib/libsd-daemon.a
+desasterd/libsd-daemon.a
+desasterd/desasterd

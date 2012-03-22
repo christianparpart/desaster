@@ -21,7 +21,7 @@ _desaster_ is a job queue manager and primarily inspired by _resque_ and it's we
 - dashboard:
   - live update feature (button on-top, or even by default)
 - failed queue: 
-  - searchable, sortable, filterable, paginated, groupable (by originated queues e.g.^hh)
+  - searchable, sortable, filterable, paginated, groupable (by originated queues e.g.)
   - automatic retry by default with exponential backoff
 
 # desaster-web
@@ -29,48 +29,40 @@ _desaster_ is a job queue manager and primarily inspired by _resque_ and it's we
 _desaster-web_ is the dedicated daemon, possibly written in Ruby/Sinatra,
 to provide access to the backend scheduler.
 
-# desaster-worker
+# desasterd
 
-Every worker host has this piece tiny management daemon installed to
-actually receive jobs and perform them.
+_desasterd_ is the dedicated daemon, written in C++11, to run on every
+worker node.
 
-We have adapters to handle different kind of jobs, such as
+This daemon may only be executed once per host. It can be started
+as a system service or in some rare cases on demand by (e.g.) your
+rails application that needs this functionality.
 
-- native command executions
-- Rails environments (w/o respawning rails on every new incoming job)
-- possibly more.
+This service will:
+- if this node is the designated scheduler master:
+  - it will schedule all tasks and pass them to all workers.
+  - it will propagate any scheduler state changes to all other nodes in the cluster.
+- if this node is NOT the designated scheduler master:
+  - it will just receive scheduler state changes by the designated master scheduler.
+  - forward incoming tasks to the designated master
+- receive incoming tasks by the designated scheduler master perform them locally.
+- start multiple auto-scaling child worker processes as a child process.
+  - guards over resource usage of their worker processes (CPU and memory usage).
+- should log worker resource usage and load distribution to allow the web frontend
+  to generate nice looking graphs.
 
-The worker should be able to announce his capabilities to the scheduler when
-it requests it, e.g. what adapters this worker supports / has enabled (not every
-worker has a rails environment).
+## Worker Adapters
 
-Each _desaster-worker_ daemon also spawns a local _desaster-scheduler_
-and announces itself to it.
+A worker can perform different tasks, such as, performing a system command
+or executing a method within a Rails environment.
 
-If you have a network with lots of worker hosts, and thus, lots of workers,
-which each will spawn their own local scheduler.
-The schedulers now negotiate each other to denote the master scheduler.
-Any other scheduler instance may take over as soon as the current master
-exits (or dies).
-
-# desaster-scheduler
-
-_desaster-scheduler_ is the dedicated daemon, written in C++11, to
-actually schedule all incoming (and fixed-scheduled) jobs according to the
-desired configuration preferences.
-
-As each worker spawns its own scheduler automatically, the designated master
-scheduler will always *execute* any jobs locally and replicate its own
-database and database-updates to all its slave nodes.
-
-All incoming jobs to any slave node will be forwarded to the designated master.
-So a worker can connect to any scheduler node (e.g. its local one).
-
-This way we ensure maximum fault tolerance as well as almost zero-configuration
-in single-server setups, thus, very easy to install.
+The latter should be pre-spawned and reused for maximum performance.
 
 ## Implementation
 
 Single threaded scheduling system using _libev_ as event machine
 (timers are implemented via `ev::timer`).
 
+# Client Bindings
+
+We at least provide bindings for Ruby, Ruby on Rails 3 (possibly 2.3.x too) and C.

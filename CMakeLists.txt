@@ -56,7 +56,5 @@ configure_file(
 add_definitions(-DHAVE_CONFIG_H)
 #add_definitions(-pthread)
 
-add_subdirectory(lib)
 add_subdirectory(desaster-web)
-add_subdirectory(desaster-worker)
-add_subdirectory(desaster-scheduler)
+add_subdirectory(desasterd)
