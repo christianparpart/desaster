@@ -57,4 +57,4 @@ add_definitions(-DHAVE_CONFIG_H)
 #add_definitions(-pthread)
 
 add_subdirectory(desaster-web)
-add_subdirectory(desasterd)
+add_subdirectory(desaster)
