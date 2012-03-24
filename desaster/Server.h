@@ -1,7 +1,13 @@
 #ifndef desaster_Server_h
 #define desaster_Server_h (1)
 
+#include <string>
+#include <vector>
 #include <ev++.h>
+
+class Job;
+class Worker;
+class ShellWorker;
 
 class Server
 {
@@ -27,8 +33,12 @@ private:
 	int peeringAttemptMax_;
 
 	int port_;
-	std::string ipaddr_;
-	std::string brdaddr_;
+	std::string bindAddress_;
+	std::string brdAddress_;
+
+	// workers
+	std::vector<Worker*> allWorkers_;
+	std::vector<ShellWorker*> shellWorkers_;
 
 public:
 	explicit Server(ev::loop_ref loop);
@@ -36,9 +46,14 @@ public:
 
 	bool setup(int argc, char* argv[]);
 
+	void enqueue(Job* job);
+	Job* dequeue();
+
+	ShellWorker* spawnShellWorker();
+
 private:
 	void printHelp(const char* program);
-	bool searchPeers(int port, const std::string& brdaddr);
+	bool searchPeers(int port, const std::string& brdAddress);
 	void peeringTimeout(ev::timer&, int);
 
 	void onJob(ev::io& io, int revents);

@@ -19,8 +19,8 @@ Server::Server(ev::loop_ref loop) :
 	peeringAttemptCount_(0),
 	peeringAttemptMax_(5),
 	port_(2691),
-	ipaddr_("0.0.0.0"),
-	brdaddr_("255.255.255.255")
+	bindAddress_("0.0.0.0"),
+	brdAddress_("255.255.255.255")
 {
 }
 
@@ -38,8 +38,8 @@ bool Server::setup(int argc, char* argv[])
 		{ 0, 0, 0, 0 }
 	};
 
-	std::string ipaddr;
-	std::string brdaddr;
+	std::string bindAddress;
+	std::string brdAddress;
 	int port = -1;
 
 	for (bool done = false; !done;) {
@@ -51,10 +51,10 @@ bool Server::setup(int argc, char* argv[])
 				printHelp(argv[0]);
 				return false;
 			case 'a':
-				ipaddr = optarg;
+				bindAddress = optarg;
 				break;
 			case 'b':
-				brdaddr = optarg;
+				brdAddress = optarg;
 				break;
 			case 'p':
 				port = atoi(optarg);
@@ -73,13 +73,13 @@ bool Server::setup(int argc, char* argv[])
 	if (port < 0)
 		port = 2691;
 
-	if (brdaddr.empty())
-		brdaddr = brdaddr_;
+	if (brdAddress.empty())
+		brdAddress = brdAddress_;
 
-	if (ipaddr.empty())
-		ipaddr = ipaddr_;
+	if (bindAddress.empty())
+		bindAddress = bindAddress_;
 
-	return searchPeers(port, brdaddr);
+	return searchPeers(port, brdAddress);
 }
 
 void Server::printHelp(const char* program)
@@ -93,13 +93,13 @@ void Server::printHelp(const char* program)
 		" -p, --port=NUMBER              port number for receiving/sending packets [%d]\n"
 		"\n",
 		program,
-		ipaddr_.c_str(),
-		brdaddr_.c_str(),
+		bindAddress_.c_str(),
+		brdAddress_.c_str(),
 		port_
 	);
 }
 
-bool Server::searchPeers(int port, const std::string& brdaddr)
+bool Server::searchPeers(int port, const std::string& brdAddress)
 {
 	int fd = ::socket(AF_INET, SOCK_DGRAM, 0);
 	if (fd < 0) {
@@ -118,7 +118,7 @@ bool Server::searchPeers(int port, const std::string& brdaddr)
 	sin.sin_family = AF_INET;
 	sin.sin_port = htons(port);
 
-	if ((val = inet_pton(AF_INET, brdaddr.c_str(), &sin.sin_addr.s_addr)) <= 0) {
+	if ((val = inet_pton(AF_INET, brdAddress.c_str(), &sin.sin_addr.s_addr)) <= 0) {
 		if (val == 0)
 			fprintf(stderr, "Address not in representation format.\n");
 		else
@@ -136,7 +136,7 @@ bool Server::searchPeers(int port, const std::string& brdaddr)
 	}
 
 	port_ = port;
-	brdaddr_ = brdaddr;
+	brdAddress_ = brdAddress;
 
 	peeringTimer_.set<Server, &Server::peeringTimeout>(this);
 	peeringTimer_.set(4.0, 0);
@@ -151,7 +151,7 @@ void Server::peeringTimeout(ev::timer&, int revents)
 
 	++peeringAttemptCount_;
 	if (peeringAttemptTimeout_ < peeringAttemptMax_) {
-		searchPeers(port_, brdaddr_);
+		searchPeers(port_, brdAddress_);
 	}
 }
 

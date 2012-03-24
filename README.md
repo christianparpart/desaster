@@ -3,7 +3,7 @@
 
 _desaster_ is a job queue manager and primarily inspired by _resque_ and it's web frontend _resque-web_.
 
-## Requirements
+## UI Requirements
 
 - queue management
   - queues should be managed via the UI
@@ -24,17 +24,28 @@ _desaster_ is a job queue manager and primarily inspired by _resque_ and it's we
   - searchable, sortable, filterable, paginated, groupable (by originated queues e.g.)
   - automatic retry by default with exponential backoff
 
+## Backend Requirements
+
+- *easily scalable* by just adding new nodes that will auto-negotiate with the existing cluster.
+- *maximum fault tolerance* of the designated scheduler master. any worker node can
+  take over the scheduling for the cluster if the current master becomes unreachable.
+- *on-demand spawning* from within the Rails environment but also be possible to
+  start it dedicated, e.g. via _systemd_ or _SysV init script_.
+- *binary process upgrades*
+- *zero configuration*, at least the (1..n) cluster should be able to run without configuration.
+- *worker* CPU/memory resource monitoring
+
 # desaster-web
 
 _desaster-web_ is the dedicated daemon, possibly written in Ruby/Sinatra,
-to provide access to the backend scheduler.
+to provide access to the backend scheduler and all worker nodes.
 
-# desasterd
+# desaster
 
-_desasterd_ is the dedicated daemon, written in C++11, to run on every
+_desaster_ is the dedicated daemon, written in C++11, to run on every
 worker node.
 
-This daemon may only be executed once per host. It can be started
+This daemon shall be only executed once per host. It can be started
 as a system service or in some rare cases on demand by (e.g.) your
 rails application that needs this functionality.
 
