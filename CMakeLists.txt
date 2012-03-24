@@ -58,3 +58,4 @@ add_definitions(-DHAVE_CONFIG_H)
 
 add_subdirectory(desaster-web)
 add_subdirectory(desaster)
+add_subdirectory(playground)

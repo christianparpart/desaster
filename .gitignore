@@ -6,5 +6,10 @@ CMakeFiles
 Makefile
 cmake_install.cmake
 config.h
-desasterd/libsd-daemon.a
-desasterd/desasterd
+desaster/libsd-daemon.a
+desaster/desaster
+playground/iterate-network-interfaces
+playground/t
+playground/udp-broadcaster
+playground/udp-receiver
+playground/zmq1
