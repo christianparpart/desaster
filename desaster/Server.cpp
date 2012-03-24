@@ -48,7 +48,7 @@ bool Server::setup(int argc, char* argv[])
 		switch (getopt_long(argc, argv, "?hb:p:", long_options, &long_index)) {
 			case '?':
 			case 'h':
-				std::printf("usage: %s\n", argv[0]);
+				printHelp(argv[0]);
 				return false;
 			case 'a':
 				ipaddr = optarg;
@@ -80,6 +80,23 @@ bool Server::setup(int argc, char* argv[])
 		ipaddr = ipaddr_;
 
 	return searchPeers(port, brdaddr);
+}
+
+void Server::printHelp(const char* program)
+{
+	printf(
+		" usage %s [-a BIND_ADDR] [-b BROADCAST_ADDR] [-p PORT]\n"
+		"\n"
+		" -?, -h, --help                 prints this help\n"
+		" -a, --bind-address=IPADDR      local IP address to bind to [%s]\n"
+		" -b, --broadcast-address=IPADDR remote IP/multicast/broadcast address to announce to [%s]\n"
+		" -p, --port=NUMBER              port number for receiving/sending packets [%d]\n"
+		"\n",
+		program,
+		ipaddr_.c_str(),
+		brdaddr_.c_str(),
+		port_
+	);
 }
 
 bool Server::searchPeers(int port, const std::string& brdaddr)

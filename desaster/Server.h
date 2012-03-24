@@ -37,6 +37,7 @@ public:
 	bool setup(int argc, char* argv[]);
 
 private:
+	void printHelp(const char* program);
 	bool searchPeers(int port, const std::string& brdaddr);
 	void peeringTimeout(ev::timer&, int);
 
