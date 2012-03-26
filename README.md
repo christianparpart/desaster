@@ -49,8 +49,15 @@ executes ruby methods, pre-forking and communicating over shared file descriptor
 
 ## HTTP/TCP Worker
 
-passes HTTP/TCP requests to backend nodes, as an effective HAproxy replacement with
-fair load balancing.
+For _Desaster_, an HTTP request is nothing else than a Job to be executed, so this framework just
+fits the best when it comes to fair load balancing your incoming HTTP requests over a large cluster.
+
+This worker implements receiving HTTP requests, possibly terminating SSL, possibly passing
+it to the designated master scheduler, to be then scheduled and passed to the actual backend
+worker.
+
+Speaking of our particular use-case, on a backend node, we might even optimize the communication path
+a little further to combine it with the ruby glue code to actually handle our Rack/Passenger Rails requests.
 
 # desaster-web
 
