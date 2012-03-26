@@ -19,3 +19,4 @@
 - worker process/host resource monitoring
 - worker load auto-scaling
 - cron scheduling
+- manual page for `desaster` daemon

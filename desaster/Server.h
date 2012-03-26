@@ -3,12 +3,15 @@
 
 #include <string>
 #include <vector>
+#include <list>
 #include <unordered_map>
 #include <ev++.h>
+#include <x0/ServerSocket.h>
 
 class Job;
 class Worker;
 class ShellWorker;
+class Connection;
 
 class Server
 {
@@ -36,6 +39,9 @@ private:
 	int port_;
 	std::string bindAddress_;
 	std::string brdAddress_;
+
+	x0::ServerSocket listener_;
+	std::list<Connection*> connections_;
 
 	// workers
 	std::vector<Worker*> allWorkers_;

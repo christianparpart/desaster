@@ -3,6 +3,15 @@
 
 _desaster_ is a job queue manager and primarily inspired by _resque_ and it's web frontend _resque-web_.
 
+## Software Dependencies
+
+- C++11 compiler, such as GCC 4.6 (or higher, not below)
+- cmake - http://cmake.org (our build system of choice)
+- pkg-config - http://www.freedesktop.org/wiki/Software/pkg-config (helper, used by the build-system)
+- libev - http://libev.schmorp.de/ (for I/O event dispatching)
+- x0 - http://xzero.io/ (its base library, later also its HTTP library for HTTP dispatching)
+- redis - http://redis.io/ (you *possibly* will ned Redis to run Desaster for shell/ruby jobs, not decided yet).
+
 ## UI Requirements
 
 - queue management
@@ -90,6 +99,8 @@ when implementing this module.
 executes ruby methods, pre-forking and communicating over shared file descriptors
 (pipes / unnamed sockets) to pass jobs and their response status.
 
+This module should effectively be able to spawn Rack, and thus Rails, applications.
+
 ## HTTP
 
 For _Desaster_, an HTTP request is nothing else than a Job to be executed, so this framework just
@@ -102,6 +113,7 @@ worker.
 Speaking of our particular use-case, on a backend node, we might even optimize the communication path
 a little further to combine it with the ruby glue code to actually handle our Rack/Passenger Rails requests.
 
-# Client Bindings
+# API Bindings
 
-We at least provide bindings for Ruby, Ruby on Rails 3 (possibly 2.3.x too) and C.
+You communicate via TCP/IP to the Desaster cluster, however, we at least provide
+an access API for Ruby (1.8 and 1.9 compatible) and C++.

@@ -2,7 +2,7 @@
 #define desaster_Worker_h
 
 #include "Pipe.h"
-#include "ev++.h"
+#include <ev++.h>
 
 class Server;
 class Job;
@@ -33,32 +33,7 @@ protected:
 	void finish(bool success);
 };
 
-// the shell worker forks on demand for every command to perform
-class ShellWorker :
-	public Worker
-{
-private:
-	// child process
-	pid_t child_;
-	ev::child childWatcher_;
-
-	// non-blocking logging pipes
-	Pipe output_;
-	ev::io outputWatcher_;
-
-public:
-	explicit ShellWorker(Server* server);
-	~ShellWorker();
-
-	virtual void perform();
-
-private:
-	void setupParent();
-	void setupChild();
-	void onOutput(ev::io&, int);
-	void onChild(ev::child&, int);
-};
-
+#if 0
 // the ruby worker pre-forks into a ruby-environment, accepting incoming
 // synchronous requests over a communication line (stdin) and reports
 // to stdout/stderr.
@@ -77,5 +52,6 @@ private:
 	// synchronous command pipe (connected to stdin)
 	Pipe input_;
 };
+#endif
 
 #endif

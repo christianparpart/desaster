@@ -21,6 +21,8 @@ Server::Server(ev::loop_ref loop) :
 	port_(2691),
 	bindAddress_("0.0.0.0"),
 	brdAddress_("255.255.255.255"),
+	listener_(loop),
+	connections_(),
 	commands_()
 {
 	//commands_["JOB PUSH SHELL"] = &Server::_pushShellCmd;
@@ -87,7 +89,7 @@ bool Server::setup(int argc, char* argv[])
 void Server::printHelp(const char* program)
 {
 	printf(
-		" usage %s [-a BIND_ADDR] [-b BROADCAST_ADDR] [-p PORT]\n"
+		" usage %s [-a BIND_ADDR] [-b BROADCAST_ADDR] [-p PORT] [-k GROUP_KEY]\n"
 		"\n"
 		" -?, -h, --help                 prints this help\n"
 		" -a, --bind-address=IPADDR      local IP address to bind to [%s]\n"
