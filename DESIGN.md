@@ -2,7 +2,7 @@
 # Example Queue Diagram
 
     ---------------------------------------------------------------------------------------------
-    |                                        full cluster (80)                                  |
+    |                                        all cluster nodes                                  |
     ---------------------------------------------------------------------------------------------
     ---------------------- -------------------------- -------------------------------------------
     | shell worker group | |    ruby worker group   | |  HTTP worker group                      |
@@ -32,6 +32,6 @@ while all other queues are first-in-first-out.
 
 ## possible HTTP request flow
 
-    CLIENT -> nginx (ssl termination/gzip) [-> varnish] -> Desaster Scheduler -> Desaster Worker
+    CLIENT -> nginx (ssl termination/gzip) [-> varnish] -> Desaster Scheduler -> Desaster Worker (with Rails loaded)
                                      \_____________________/
 
