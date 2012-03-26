@@ -23,7 +23,7 @@ Server::Server(ev::loop_ref loop) :
 	brdAddress_("255.255.255.255"),
 	commands_()
 {
-	commands_["JOB PUSH SHELL"] = &Server::_pushShellCmd;
+	//commands_["JOB PUSH SHELL"] = &Server::_pushShellCmd;
 }
 
 Server::~Server()
@@ -99,7 +99,7 @@ void Server::printHelp(const char* program)
 		bindAddress_.c_str(),
 		brdAddress_.c_str(),
 		port_,
-		"default",
+		"default"
 	);
 }
 

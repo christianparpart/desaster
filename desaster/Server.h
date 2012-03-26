@@ -41,7 +41,7 @@ private:
 	std::vector<Worker*> allWorkers_;
 	std::vector<ShellWorker*> shellWorkers_;
 
-	std::unordered_map<std::string, void (Server::*)(int fd, std::string& args)> commands_;
+	std::unordered_map<std::string, void (Server::*)(int fd, const std::string& args)> commands_;
 
 public:
 	explicit Server(ev::loop_ref loop);

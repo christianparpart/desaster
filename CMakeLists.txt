@@ -49,13 +49,18 @@ link_directories(${EV_LIBRARY_DIR})
 add_definitions(${EV_CPPFLAGS})
 #set(LIBS ${LIBS} ${EV_LIBRARIES})
 
-configure_file(
-	${CMAKE_CURRENT_SOURCE_DIR}/config.h.cmake
-	${CMAKE_CURRENT_BINARY_DIR}/config.h)
+# x0
+pkg_check_modules(XZERO REQUIRED XzeroBase>=0.4)
+message(STATUS "Xzero compile flags: ${XZERO_CFLAGS}")
+message(STATUS "Xzero library directory: ${XZERO_LIBRARY_DIRS}")
+message(STATUS "Xzero libraries: ${XZERO_LIBRARIES}")
 
 add_definitions(-DHAVE_CONFIG_H)
-#add_definitions(-pthread)
 
 add_subdirectory(desaster-web)
 add_subdirectory(desaster)
 add_subdirectory(playground)
+
+configure_file(
+	${CMAKE_CURRENT_SOURCE_DIR}/config.h.cmake
+	${CMAKE_CURRENT_BINARY_DIR}/config.h)

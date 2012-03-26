@@ -36,29 +36,6 @@ _desaster_ is a job queue manager and primarily inspired by _resque_ and it's we
 - *worker* CPU/memory resource monitoring
 
 
-# Worker Adapters
-
-## Shell Worker
-
-executes shell commands, forking on demand.
-
-## Ruby Worker
-
-executes ruby methods, pre-forking and communicating over shared file descriptors
-(pipes / unnamed sockets) to pass jobs and their response status.
-
-## HTTP/TCP Worker
-
-For _Desaster_, an HTTP request is nothing else than a Job to be executed, so this framework just
-fits the best when it comes to fair load balancing your incoming HTTP requests over a large cluster.
-
-This worker implements receiving HTTP requests, possibly terminating SSL, possibly passing
-it to the designated master scheduler, to be then scheduled and passed to the actual backend
-worker.
-
-Speaking of our particular use-case, on a backend node, we might even optimize the communication path
-a little further to combine it with the ruby glue code to actually handle our Rack/Passenger Rails requests.
-
 # desaster-web
 
 _desaster-web_ is the dedicated daemon, possibly written in Ruby/Sinatra,
@@ -86,17 +63,44 @@ This service will:
 - should log worker resource usage and load distribution to allow the web frontend
   to generate nice looking graphs.
 
-## Worker Adapters
-
-A worker can perform different tasks, such as, performing a system command
-or executing a method within a Rails environment.
-
-The latter should be pre-spawned and reused for maximum performance.
-
 ## Implementation
 
 Single threaded scheduling system using _libev_ as event machine
 (timers are implemented via `ev::timer`).
+
+# Modules
+
+## Shell
+
+Executes shell commands, forking on demand.
+
+## Cron
+
+Executes shell commands on any shell worker node at a given time/period, just like UNIX cronjobs
+but enqueued and scheduled within the _Desaster_ cluster.
+
+This module rarely depends on the `shell`-module as it just schedules tasks to be performed
+by the `shell` module.
+
+At a later stage, we might also want to schedule ruby method invokations, which should be kept in mind
+when implementing this module.
+
+## Ruby
+
+executes ruby methods, pre-forking and communicating over shared file descriptors
+(pipes / unnamed sockets) to pass jobs and their response status.
+
+## HTTP
+
+For _Desaster_, an HTTP request is nothing else than a Job to be executed, so this framework just
+fits the best when it comes to fair load balancing your incoming HTTP requests over a large cluster.
+
+This worker implements receiving HTTP requests, possibly terminating SSL, possibly passing
+it to the designated master scheduler, to be then scheduled and passed to the actual backend
+worker.
+
+Speaking of our particular use-case, on a backend node, we might even optimize the communication path
+a little further to combine it with the ruby glue code to actually handle our Rack/Passenger Rails requests.
 
 # Client Bindings
 
