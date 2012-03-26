@@ -18,3 +18,4 @@
 ## Milestone 3
 - worker process/host resource monitoring
 - worker load auto-scaling
+- cron scheduling

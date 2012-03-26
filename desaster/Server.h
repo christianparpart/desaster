@@ -3,6 +3,7 @@
 
 #include <string>
 #include <vector>
+#include <unordered_map>
 #include <ev++.h>
 
 class Job;
@@ -40,6 +41,8 @@ private:
 	std::vector<Worker*> allWorkers_;
 	std::vector<ShellWorker*> shellWorkers_;
 
+	std::unordered_map<std::string, void (Server::*)(int fd, std::string& args)> commands_;
+
 public:
 	explicit Server(ev::loop_ref loop);
 	~Server();
@@ -57,6 +60,9 @@ private:
 	void peeringTimeout(ev::timer&, int);
 
 	void onJob(ev::io& io, int revents);
+
+	// commands
+	void _pushShellCmd(int fd, const std::string& args);
 };
 
 #endif

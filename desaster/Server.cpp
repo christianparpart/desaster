@@ -20,8 +20,10 @@ Server::Server(ev::loop_ref loop) :
 	peeringAttemptMax_(5),
 	port_(2691),
 	bindAddress_("0.0.0.0"),
-	brdAddress_("255.255.255.255")
+	brdAddress_("255.255.255.255"),
+	commands_()
 {
+	commands_["JOB PUSH SHELL"] = &Server::_pushShellCmd;
 }
 
 Server::~Server()
@@ -91,14 +93,17 @@ void Server::printHelp(const char* program)
 		" -a, --bind-address=IPADDR      local IP address to bind to [%s]\n"
 		" -b, --broadcast-address=IPADDR remote IP/multicast/broadcast address to announce to [%s]\n"
 		" -p, --port=NUMBER              port number for receiving/sending packets [%d]\n"
+		" -k, --key=GROUP_KEY            cluster-group shared key [%s]\n"
 		"\n",
 		program,
 		bindAddress_.c_str(),
 		brdAddress_.c_str(),
-		port_
+		port_,
+		"default",
 	);
 }
 
+// {{{ peering
 bool Server::searchPeers(int port, const std::string& brdAddress)
 {
 	int fd = ::socket(AF_INET, SOCK_DGRAM, 0);
@@ -154,4 +159,4 @@ void Server::peeringTimeout(ev::timer&, int revents)
 		searchPeers(port_, brdAddress_);
 	}
 }
-
+// }}}

@@ -35,6 +35,23 @@ _desaster_ is a job queue manager and primarily inspired by _resque_ and it's we
 - *zero configuration*, at least the (1..n) cluster should be able to run without configuration.
 - *worker* CPU/memory resource monitoring
 
+
+# Worker Adapters
+
+## Shell Worker
+
+executes shell commands, forking on demand.
+
+## Ruby Worker
+
+executes ruby methods, pre-forking and communicating over shared file descriptors
+(pipes / unnamed sockets) to pass jobs and their response status.
+
+## HTTP/TCP Worker
+
+passes HTTP/TCP requests to backend nodes, as an effective HAproxy replacement with
+fair load balancing.
+
 # desaster-web
 
 _desaster-web_ is the dedicated daemon, possibly written in Ruby/Sinatra,
