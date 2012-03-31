@@ -1,10 +1,8 @@
-#include "qdisc.h"
-#include "Server.h"
+#include <desaster/Server.h>
+#include <desaster/qdisc.h>
 #include <ev++.h>
-#include <cstdio>
-#include <sstream>
-#include <memory>
 
+#if 0 // {{{
 void dump(qdisc::classful* disc, const char* msg)
 {
 	printf("%s -- %s\n", disc->str().c_str(), msg);
@@ -91,6 +89,7 @@ void qdisc_test()
 		dump(root.get(), "n0-job");
 	}
 }
+#endif // }}}
 
 int main(int argc, char* argv[])
 {
@@ -100,9 +99,7 @@ int main(int argc, char* argv[])
 	if (!server.setup(argc, argv))
 		return 1;
 
-	qdisc_test();
-
-	//loop.run();
+	loop.run();
 
 	return 0;
 }

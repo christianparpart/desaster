@@ -3,14 +3,40 @@
 
 _desaster_ is a job queue manager and primarily inspired by _resque_ and it's web frontend _resque-web_.
 
-## Software Dependencies
+# Command-line Syntax
 
-- C++11 compiler, such as GCC 4.6 (or higher, not below)
-- cmake - http://cmake.org (our build system of choice)
-- pkg-config - http://www.freedesktop.org/wiki/Software/pkg-config (helper, used by the build-system)
-- libev - http://libev.schmorp.de/ (for I/O event dispatching)
-- x0 - http://xzero.io/ (its base library, later also its HTTP library for HTTP dispatching)
-- redis - http://redis.io/ (you *possibly* will ned Redis to run Desaster for shell/ruby jobs, not decided yet).
+    desaster, Job Queueing Manager, version 0.1.0 [http://github.com/trapni/desaster/]
+    Copyright (c) 2012 by Christian Parpart <trapni@gentoo.org>
+    Licensed under GPL-3 [http://gplv3.fsf.org/]
+
+     usage: desaster [-a BIND_ADDR] [-b BROADCAST_ADDR] [-p PORT] [-k GROUP_KEY]
+
+     -?, -h, --help                 prints this help
+     -a, --bind-address=IPADDR      local IP address to bind to [0.0.0.0]
+     -b, --broadcast-address=IPADDR remote IP/multicast/broadcast address to announce to [255.255.255.255]
+     -p, --port=NUMBER              port number for receiving/sending packets [2691]
+     -k, --key=GROUP_KEY            cluster-group shared key [default]
+     -s, --standalone               do not broadcast for peering with cluster
+
+To rn _desaster_ in standard cluster-mode, just run without any arguments: `desaster`.
+This will auto-peer with other _desaster_-nodes within the same subnet.
+
+To run _desaster_ in standalone-mode, just run `desaster -s`.
+
+# Software Implementation
+
+## Dependencies
+
+- build-time dependencies:
+  - C++11 compiler, such as GCC 4.6 (or higher, not below)
+  - cmake - http://cmake.org (our build system of choice)
+  - pkg-config - http://www.freedesktop.org/wiki/Software/pkg-config (helper, used by the build-system)
+- build- and runtime dependencies:
+  - libev - http://libev.schmorp.de/ (for I/O event dispatching)
+  - x0 - http://xzero.io/ (its base library, later also its HTTP library for HTTP dispatching)
+  - hiredis
+- runtime dependencies:
+  - redis - http://redis.io/ (you *possibly* will ned Redis to run Desaster for shell/ruby jobs, not decided yet).
 
 ## UI Requirements
 
@@ -18,7 +44,8 @@ _desaster_ is a job queue manager and primarily inspired by _resque_ and it's we
   - queues should be managed via the UI
   - dynamically attach/detach queues from/to workers
   - true and pluggable queueing system (SFQ, HTB, ...)
-  - optional: automatically unique / set-based queues
+  - timed job-requeuing blacklist (rejecting every job identity that
+    has been enqueued/processed just recently)
   - list queue entries
     - searchable, sortable, filterable, paginated
     - perform actions on selected jobs
@@ -60,6 +87,7 @@ as a system service or in some rare cases on demand by (e.g.) your
 rails application that needs this functionality.
 
 This service will:
+
 - if this node is the designated scheduler master:
   - it will schedule all tasks and pass them to all workers.
   - it will propagate any scheduler state changes to all other nodes in the cluster.

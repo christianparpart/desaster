@@ -36,7 +36,7 @@ int main(int argc, char *argv[])
 
     while (1)
     {
-		char *message = "Hello, World!";
+		const char *message = "Hello, World!";
         if (sendto(fd, message, strlen(message), 0,(struct sockaddr *) &addr, sizeof(addr)) < 0)
         {
             perror("sendto");

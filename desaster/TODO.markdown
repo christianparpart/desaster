@@ -6,6 +6,7 @@
 - standalone-worker mode (no cluster support)
 - HTB-style scheduling for local workers
 - support worker-adapter: shell
+- systemd: support socket based activation
 
 ## Milestone 2
 - cluster support
@@ -20,3 +21,6 @@
 - worker load auto-scaling
 - cron scheduling
 - manual page for `desaster` daemon
+
+## Milestone 4
+- live process upgrade

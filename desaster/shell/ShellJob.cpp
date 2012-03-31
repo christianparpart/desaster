@@ -1,6 +1,7 @@
 #include <desaster/shell/ShellJob.h>
 #include <sstream>
 
+/*
 ShellJob::ShellJob(const std::string& cmd) :
 	command_(cmd)
 {
@@ -21,3 +22,4 @@ std::string ShellJob::serialize() const
 {
 	return command_;
 }
+*/

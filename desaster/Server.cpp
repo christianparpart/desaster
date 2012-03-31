@@ -1,5 +1,11 @@
-#include "Server.h"
+#include <desaster/Server.h>
+#include <desaster/Connection.h>
+#include <desaster/Module.h>
+#include <desaster/Queue.h>
+#include <desaster/config.h>
+
 #include <iostream>
+#include <algorithm>
 #include <ctime>
 #include <cstring>
 #include <cstdio>
@@ -13,6 +19,9 @@
 #include <getopt.h>
 
 Server::Server(ev::loop_ref loop) :
+	state_(State::Stopped),
+	schedulerRole_(SchedulerRole::Slave),
+	clusterGroup_("default"),
 	loop_(loop),
 	peeringTimer_(loop_),
 	peeringAttemptTimeout_(5), // seconds
@@ -21,15 +30,32 @@ Server::Server(ev::loop_ref loop) :
 	port_(2691),
 	bindAddress_("0.0.0.0"),
 	brdAddress_("255.255.255.255"),
-	listener_(loop),
+	backlog_(128),
+	listenerWatcher_(loop_),
 	connections_(),
+	peeringWatcher_(loop_),
+	modules_(),
+	queues_(),
+	terminateSignal_(loop_),
+	interruptSignal_(loop_),
 	commands_()
 {
 	//commands_["JOB PUSH SHELL"] = &Server::_pushShellCmd;
+
+	terminateSignal_.set<Server, &Server::terminateSignal>(this);
+	terminateSignal_.set(SIGTERM);
+	terminateSignal_.start();
+	loop_.unref();
+
+	interruptSignal_.set<Server, &Server::interruptSignal>(this);
+	interruptSignal_.set(SIGINT);
+	interruptSignal_.start();
+	loop_.unref();
 }
 
 Server::~Server()
 {
+	stop();
 }
 
 bool Server::setup(int argc, char* argv[])
@@ -39,29 +65,35 @@ bool Server::setup(int argc, char* argv[])
 		{ "port", required_argument, nullptr, 'p' },
 		{ "bind-address", required_argument, nullptr, 'a' },
 		{ "broadcast-address", required_argument, nullptr, 'b' },
+		{ "cluster-group", required_argument, nullptr, 'g' },
+		{ "standalone", no_argument, nullptr, 's' },
 		{ 0, 0, 0, 0 }
 	};
 
-	std::string bindAddress;
-	std::string brdAddress;
-	int port = -1;
+	bool standalone = false;
 
 	for (bool done = false; !done;) {
 		int long_index = 0;
 
-		switch (getopt_long(argc, argv, "?hb:p:", long_options, &long_index)) {
+		switch (getopt_long(argc, argv, "?hb:p:g:s", long_options, &long_index)) {
 			case '?':
 			case 'h':
-				printHelp(argv[0]);
+				printHelp();
 				return false;
 			case 'a':
-				bindAddress = optarg;
+				bindAddress_ = optarg;
 				break;
 			case 'b':
-				brdAddress = optarg;
+				brdAddress_ = optarg;
 				break;
 			case 'p':
-				port = atoi(optarg);
+				port_ = atoi(optarg);
+				break;
+			case 'g':
+				clusterGroup_ = optarg;
+				break;
+			case 's':
+				standalone = true;
 				break;
 			case 0:
 				// long opt with val != NULL
@@ -74,40 +106,214 @@ bool Server::setup(int argc, char* argv[])
 		}
 	}
 
-	if (port < 0)
-		port = 2691;
+	if (!setupListener())
+		return false;
 
-	if (brdAddress.empty())
-		brdAddress = brdAddress_;
+	if (!setupPeeringListener())
+		return false;
 
-	if (bindAddress.empty())
-		bindAddress = bindAddress_;
+	if (standalone || !searchPeers())
+		becomeMaster();
 
-	return searchPeers(port, brdAddress);
+	return true;
 }
 
-void Server::printHelp(const char* program)
+void Server::stop()
 {
-	printf(
-		" usage %s [-a BIND_ADDR] [-b BROADCAST_ADDR] [-p PORT] [-k GROUP_KEY]\n"
+	if (terminateSignal_.is_active()) {
+		loop_.ref();
+		terminateSignal_.stop();
+	}
+
+	if (interruptSignal_.is_active()) {
+		loop_.ref();
+		interruptSignal_.stop();
+	}
+
+	if (isMaster()) {
+		// TODO promote another node to become master (once all jobs are done)
+	} else {
+		// TODO notify master that we're to quit (once all jobs are done)
+	}
+
+	if (peeringTimer_.is_active()) {
+		peeringTimer_.stop();
+	}
+
+	if (peeringWatcher_.is_active()) {
+		peeringWatcher_.stop();
+		::close(peeringWatcher_.fd);
+	}
+
+	if (listenerWatcher_.is_active()) {
+		listenerWatcher_.stop();
+		::close(listenerWatcher_.fd);
+	}
+}
+
+void Server::terminateSignal(ev::sig& sig, int revents)
+{
+	printf("Terminate signal received. Stopping\n");
+	stop();
+}
+
+void Server::interruptSignal(ev::sig& sig, int revents)
+{
+	printf("Interrupt signal received. Stopping\n");
+	stop();
+}
+
+void Server::printHelp()
+{
+	const char* homepageUrl = "http://github.com/trapni/desaster/";
+
+	std::printf(
+		"desaster, Job Queueing Manager, version %s [%s]\n"
+		"Copyright (c) 2012 by Christian Parpart <trapni@gentoo.org>\n"
+		"Licensed under GPL-3 [http://gplv3.fsf.org/]\n"
+		"\n"
+		" usage: desaster [-a BIND_ADDR] [-b BROADCAST_ADDR] [-p PORT] [-k GROUP_KEY]\n"
 		"\n"
 		" -?, -h, --help                 prints this help\n"
 		" -a, --bind-address=IPADDR      local IP address to bind to [%s]\n"
 		" -b, --broadcast-address=IPADDR remote IP/multicast/broadcast address to announce to [%s]\n"
 		" -p, --port=NUMBER              port number for receiving/sending packets [%d]\n"
 		" -k, --key=GROUP_KEY            cluster-group shared key [%s]\n"
+		" -s, --standalone               do not broadcast for peering with cluster\n"
 		"\n",
-		program,
+		PACKAGE_VERSION,
+		homepageUrl,
 		bindAddress_.c_str(),
 		brdAddress_.c_str(),
 		port_,
-		"default"
+		clusterGroup_.c_str()
 	);
 }
 
-// {{{ peering
-bool Server::searchPeers(int port, const std::string& brdAddress)
+// {{{ server network handling
+bool Server::setupListener()
 {
+	std::printf("Setting up listener at tcp://%s:%d\n", bindAddress_.c_str(), port_);
+
+	int fd = ::socket(AF_INET, SOCK_STREAM, 0);
+	if (fd < 0) {
+		perror("socket");
+		return false;
+	}
+
+	struct sockaddr_in sin;
+	memset(&sin, 0, sizeof(sin));
+	sin.sin_family = AF_INET;
+	sin.sin_port = htons(port_);
+
+	int rv;
+	if ((rv = inet_pton(AF_INET, bindAddress_.c_str(), &sin.sin_addr.s_addr)) <= 0) {
+		if (rv == 0)
+			fprintf(stderr, "Address not in representation format.\n");
+		else
+			perror("inet_pton");
+		close(fd);
+		return false;
+	}
+
+	rv = bind(fd, (sockaddr*)&sin, sizeof(sin));
+	if (rv < 0) {
+		perror("bind");
+		close(fd);
+		return false;
+	}
+
+	rv = listen(fd, backlog_);
+	if (rv < 0) {
+		perror("listen");
+		close(fd);
+		return false;
+	}
+
+	listenerWatcher_.set<Server, &Server::incoming>(this);
+	listenerWatcher_.set(fd, ev::READ);
+	listenerWatcher_.start();
+
+	return true;
+}
+
+void Server::incoming(ev::io& listener, int revents)
+{
+	std::printf("Server: new client connected\n");
+
+	sockaddr_in sin;
+	socklen_t slen = sizeof(sin);
+	int fd = accept(listener.fd, (sockaddr*)&sin, &slen);
+
+	if (Connection* c = new Connection(this, fd)) {
+		connections_.push_back(c);
+	} else {
+		close(fd);
+	}
+}
+
+Connection* Server::unlink(Connection* connection)
+{
+	auto i = std::find(connections_.begin(), connections_.end(), connection);
+	if (i != connections_.end())
+		connections_.erase(i);
+
+	return connection;
+}
+// }}}
+
+// {{{ peering
+bool Server::setupPeeringListener()
+{
+	std::printf("Setting up peering listener at udp://%s:%d\n", bindAddress_.c_str(), port_);
+
+	int fd = ::socket(AF_INET, SOCK_DGRAM, 0);
+	if (fd < 0) {
+		perror("socket");
+		return false;
+	}
+
+	struct sockaddr_in sin;
+	memset(&sin, 0, sizeof(sin));
+	sin.sin_family = AF_INET;
+	sin.sin_port = htons(port_);
+
+	int rv;
+	if ((rv = inet_pton(AF_INET, bindAddress_.c_str(), &sin.sin_addr.s_addr)) <= 0) {
+		if (rv == 0)
+			fprintf(stderr, "Address not in representation format.\n");
+		else
+			perror("inet_pton");
+		close(fd);
+		return false;
+	}
+
+	rv = bind(fd, (sockaddr*)&sin, sizeof(sin));
+	if (rv < 0) {
+		perror("bind");
+		close(fd);
+		return false;
+	}
+
+/*	rv = listen(fd, backlog_);
+	if (rv < 0) {
+		perror("listen");
+		close(fd);
+		return false;
+	}
+*/
+	peeringWatcher_.set<Server, &Server::peering>(this);
+	peeringWatcher_.set(fd, ev::READ);
+	peeringWatcher_.start();
+
+	return true;
+}
+
+bool Server::searchPeers()
+{
+	std::printf("Searching peeers via %s:%d\n", brdAddress_.c_str(), port_);
+	state_ = State::BroadcastingForPeers;
+
 	int fd = ::socket(AF_INET, SOCK_DGRAM, 0);
 	if (fd < 0) {
 		perror("socket");
@@ -123,9 +329,9 @@ bool Server::searchPeers(int port, const std::string& brdAddress)
 	struct sockaddr_in sin;
 	memset(&sin, 0, sizeof(sin));
 	sin.sin_family = AF_INET;
-	sin.sin_port = htons(port);
+	sin.sin_port = htons(port_);
 
-	if ((val = inet_pton(AF_INET, brdAddress.c_str(), &sin.sin_addr.s_addr)) <= 0) {
+	if ((val = inet_pton(AF_INET, brdAddress_.c_str(), &sin.sin_addr.s_addr)) <= 0) {
 		if (val == 0)
 			fprintf(stderr, "Address not in representation format.\n");
 		else
@@ -133,17 +339,14 @@ bool Server::searchPeers(int port, const std::string& brdAddress)
 		return false;
 	}
 
-	std::string message = "HELLO";
-	val = sendto(fd, message.data(), message.size(), 0,
-		(sockaddr*)&sin, sizeof(sin));
+	char msg[128];
+	ssize_t len = snprintf(msg, sizeof(msg), "HELLO %s", clusterGroup_.c_str());
+	val = sendto(fd, msg, len, 0, (sockaddr*)&sin, sizeof(sin));
 
 	if (val < 0) {
 		perror("sendto");
 		return false;
 	}
-
-	port_ = port;
-	brdAddress_ = brdAddress;
 
 	peeringTimer_.set<Server, &Server::peeringTimeout>(this);
 	peeringTimer_.set(4.0, 0);
@@ -154,11 +357,50 @@ bool Server::searchPeers(int port, const std::string& brdAddress)
 
 void Server::peeringTimeout(ev::timer&, int revents)
 {
-	printf("peering attempt timed out.\n");
-
 	++peeringAttemptCount_;
-	if (peeringAttemptTimeout_ < peeringAttemptMax_) {
-		searchPeers(port_, brdAddress_);
+
+	if (peeringAttemptCount_ < peeringAttemptMax_) {
+		printf("Peering attempt (%d/%d) timed out. Retrying.\n", peeringAttemptCount_, peeringAttemptMax_);
+		searchPeers();
+	} else {
+		printf("Peering attempt (%d/%d) timed out. Going standalone.\n", peeringAttemptCount_, peeringAttemptMax_);
+		becomeMaster();
+	}
+}
+
+void Server::becomeMaster()
+{
+	printf("Become master.\n");
+
+	state_ = State::Running;
+	schedulerRole_ = SchedulerRole::Master;
+}
+
+void Server::becomeSlave()
+{
+	printf("Become slave.\n");
+
+	state_ = State::Running;
+	schedulerRole_ = SchedulerRole::Slave;
+}
+
+void Server::peering(ev::io& io, int revents)
+{
+	char buf[4096];
+	struct sockaddr_in sin;
+	socklen_t slen = sizeof(sin);
+
+	ssize_t n = recvfrom(io.fd, buf, sizeof(buf), 0, (sockaddr*)&sin, &slen);
+	if (n < 0) {
+		printf("Invalid Peering packet received. %s\n", strerror(errno));
+	} else if (n > 0) {
+		buf[n] = '\0';
+		char ip[16];
+		if (!inet_ntop(AF_INET, &sin.sin_addr, ip, sizeof(ip)))
+			strcpy(ip, "unknown");
+		int port = ntohs(sin.sin_port);
+
+		printf("Peering request received [%s:%d]: %s\n", ip, port, buf);
 	}
 }
 // }}}

@@ -3,20 +3,21 @@
 
 #include <desaster/Job.h>
 
+class ShellModule;
+
 class ShellJob :
 	public Job
 {
 private:
-	std::string command_;
+	ShellModule* module_;
 
 public:
-	ShellJob(const std::string& cmd);
+	ShellJob(Queue* owner, const std::string& cmd);
 	~ShellJob();
-
-	const std::string& command() const { return command_; }
 
 	virtual std::string str() const;
 	virtual std::string serialize() const;
+	virtual void perform();
 };
 
 #endif
