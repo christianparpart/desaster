@@ -120,9 +120,10 @@ void Connection::write(const char* message)
 bool Connection::handleWrite()
 {
 	printf("handle Write\n");
-	const char* buf = writeBuffer_.rdbuf();
+	std::stringbuf* buf = writeBuffer_.rdbuf();
+	const char* p = &buf->str()[writePos_];
 
-	ssize_t rv = ::write(fd_, buf + writePos_, writeBuffer_.tellg() - writePos_);
+	ssize_t rv = ::write(fd_, p, writeBuffer_.tellp() - writePos_);
 	if (rv < 0) {
 		perror("write");
 		return false;
@@ -130,8 +131,8 @@ bool Connection::handleWrite()
 
 	writePos_ += rv;
 
-	if (writePos_ == writeBuffer_.tellg()) {
-		writeBuffer_.clear();
+	if (writePos_ == writeBuffer_.tellp()) {
+		writeBuffer_.seekp(0);
 		writePos_ = 0;
 		startRead();
 	}
