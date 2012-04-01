@@ -9,7 +9,10 @@ class Server;
 /*!
  * \brief represents TCP/IP connection from remote cluster node (or any client) to local cluster node.
  *
- * Processes client commands
+ * Processes client commands.
+ * Client commands are text based, a request is a command token,
+ * followed by a single space, and an variable length argument,
+ * terminated by an LF.
  */
 class Connection
 {
@@ -76,9 +79,11 @@ private:
 
 	void startRead();
 	bool handleRead();
-	void handleCommand(const char* cmd, const char* arg);
+
 	void startWrite();
 	bool handleWrite();
+
+	void handleCommand(const char* cmd, const char* arg);
 };
 
 #endif

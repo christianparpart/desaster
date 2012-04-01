@@ -102,7 +102,7 @@ bool Connection::handleRead()
 
 void Connection::handleCommand(const char* cmd, const char* arg)
 {
-	printf("handleCmd: %s: %s\n", cmd, arg);
+	printf("handleCmd: '%s': '%s'\n", cmd, arg);
 
 	auto i = server_->commands_.find(cmd);
 	if (i != server_->commands_.end()) {

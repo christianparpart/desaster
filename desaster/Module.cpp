@@ -1,9 +1,9 @@
 #include <desaster/Module.h>
 
 Module::Module(Server* server, const std::string& name) :
+	Logging(name.c_str()),
 	server_(server),
-	name_(name),
-	commands_()
+	name_(name)
 {
 }
 
@@ -11,10 +11,11 @@ Module::~Module()
 {
 }
 
-void Module::handleCommand(const Connection::Message& message)
+bool Module::start()
 {
-	auto c = commands_.find(message.command());
-	if (c == commands_.end()) {
-		(this->*(c->second))(message);
-	}
+	return true;
+}
+
+void Module::stop()
+{
 }

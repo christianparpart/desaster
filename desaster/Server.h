@@ -1,6 +1,7 @@
 #ifndef desaster_Server_h
 #define desaster_Server_h (1)
 
+#include <desaster/Logging.h>
 #include <string>
 #include <vector>
 #include <list>
@@ -10,9 +11,9 @@
 class Job;
 class Queue;
 class Module;
-class Connection;
 
-class Server
+class Server :
+	public Logging
 {
 private:
 	enum class State {
@@ -43,19 +44,12 @@ private:
 	std::string bindAddress_;
 	std::string brdAddress_;
 
-	int backlog_;
-	ev::io listenerWatcher_;
-	std::list<Connection*> connections_;
-
 	std::list<Module*> modules_;
 	std::vector<Queue*> queues_;
 
 	ev::sig terminateSignal_;
 	ev::sig interruptSignal_;
 
-	std::unordered_map<std::string, void (Server::*)(Connection* remote, const std::string& args)> commands_;
-
-	friend class Connection;
 	friend class Module;
 	friend class Queue;
 
@@ -71,36 +65,28 @@ public:
 	bool isMaster() const { return schedulerRole_ == SchedulerRole::Master; }
 
 	Queue* createQueue(const std::string& name);
+	Queue* findQueue(const std::string& name) const;
 
-	void enqueue(Job* job);
-	Job* dequeue();
+	Module* registerModule(Module* module);
+	Module* unregisterModule(Module* module);
 
-	void registerModule(Module* module);
-	void unregisterModule(Module* module);
+	template<typename T> T* module() const { // {{{
+		for (auto module: modules_)
+			if (T* u = dynamic_cast<T*>(module))
+				return u;
+
+		return nullptr;
+	} // }}}
 
 private:
-	Connection* unlink(Connection* connection);
 	Queue* unlink(Queue* queue);
 	Module* unlink(Module* module);
 
 private:
 	void printHelp();
-	bool setupListener();
-	bool setupPeeringListener();
-	bool searchPeers();
-	void peeringTimeout(ev::timer&, int);
-	void becomeMaster();
-	void becomeSlave();
-
-	void peering(ev::io& listener, int revents);
-	void incoming(ev::io& listener, int revents);
-	void onJob(ev::io& io, int revents);
 
 	void terminateSignal(ev::sig& signal, int revents);
 	void interruptSignal(ev::sig& signal, int revents);
-
-	// commands
-	void _pushShellCmd(int fd, const std::string& args);
 };
 
 #endif
