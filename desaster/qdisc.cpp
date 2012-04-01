@@ -103,6 +103,8 @@ size_t htb::node::get(size_t n)
 
 void htb::node::put(size_t n)
 {
+	assert(actual_rate() + n <= ceil());
+
 	size_t overrate = over_rate();
 	if (overrate) {
 		size_t red = std::min(overrate, n);
@@ -170,7 +172,8 @@ size_t htb::get(size_t n)
 
 void htb::put(size_t n)
 {
-	available_ -= n;
+	assert(available_ + n <= capacity_);
+	available_ += n;
 }
 
 void htb::accept(visitor* c)
