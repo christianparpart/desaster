@@ -232,7 +232,7 @@ void Server::printHelp()
 		" -p, --port=NUMBER                      port number for receiving/sending packets [%d]\n"
 		"\n"
 		" -K, --cluster-group=GROUP_KEY          cluster-group shared key [%s]\n"
-		" -K, --cluster-bind-address             cluster syncronization bind address [%s]\n"
+		" -K, --cluster-bind-address=IPADDR      cluster syncronization bind address [%s]\n"
 		" -B, --cluster-broadcast-address=IPADDR remote IP/multicast/broadcast address to\n"
 		"                                        announce to [%s]\n"
 		" -P, --cluster-port=NUMBER              clsuter tcp/udp port number [%d]\n"
