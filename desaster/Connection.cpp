@@ -1,5 +1,6 @@
 #include <desaster/Connection.h>
 #include <desaster/Server.h>
+#include <cstring>
 
 Connection::Connection(Server* server, int fd) :
 	server_(server),
@@ -86,7 +87,7 @@ bool Connection::handleRead()
 		cmd[rv] = '\0';
 
 		// split args off the command 
-		char *arg = strchr(cmd, ' ');
+		char *arg = std::strchr(cmd, ' ');
 		if (arg) {
 			*arg = '\0';
 			++arg;

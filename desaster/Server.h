@@ -6,7 +6,6 @@
 #include <list>
 #include <unordered_map>
 #include <ev++.h>
-#include <x0/ServerSocket.h>
 
 class Job;
 class Queue;
@@ -34,7 +33,7 @@ private:
 
 	ev::loop_ref loop_;
 
-	int peeringListener_;
+	ev::io peeringWatcher_;
 	ev::timer peeringTimer_;
 	int peeringAttemptTimeout_;
 	int peeringAttemptCount_;
@@ -47,8 +46,6 @@ private:
 	int backlog_;
 	ev::io listenerWatcher_;
 	std::list<Connection*> connections_;
-
-	ev::io peeringWatcher_;
 
 	std::list<Module*> modules_;
 	std::vector<Queue*> queues_;

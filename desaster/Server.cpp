@@ -23,6 +23,7 @@ Server::Server(ev::loop_ref loop) :
 	schedulerRole_(SchedulerRole::Slave),
 	clusterGroup_("default"),
 	loop_(loop),
+	peeringWatcher_(loop_),
 	peeringTimer_(loop_),
 	peeringAttemptTimeout_(5), // seconds
 	peeringAttemptCount_(0),
@@ -33,7 +34,6 @@ Server::Server(ev::loop_ref loop) :
 	backlog_(128),
 	listenerWatcher_(loop_),
 	connections_(),
-	peeringWatcher_(loop_),
 	modules_(),
 	queues_(),
 	terminateSignal_(loop_),
@@ -295,13 +295,6 @@ bool Server::setupPeeringListener()
 		return false;
 	}
 
-/*	rv = listen(fd, backlog_);
-	if (rv < 0) {
-		perror("listen");
-		close(fd);
-		return false;
-	}
-*/
 	peeringWatcher_.set<Server, &Server::peering>(this);
 	peeringWatcher_.set(fd, ev::READ);
 	peeringWatcher_.start();
