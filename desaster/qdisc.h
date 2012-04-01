@@ -26,6 +26,8 @@ public:
 	size_t available() const { return available_; }
 	size_t size() const { return capacity_ - available_; }
 
+	virtual bool reserve(size_t capacity);
+
 	virtual size_t get(size_t n) = 0;
 	virtual void put(size_t n) = 0;
 
@@ -93,7 +95,7 @@ public:
 	~htb();
 
 	node* create_child(const std::string& name,
-		size_t rate, size_t ceil = 0,
+		size_t rate = 0, size_t ceil = 0,
 		size_t burst = 1, size_t quantum = 1);
 
 	void destroy_child(const std::string& name);

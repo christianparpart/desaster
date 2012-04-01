@@ -4,6 +4,7 @@ project(desaster)
 set(PACKAGE_NAME "desaster")
 set(PACKAGE_VERSION "0.1.0")
 set(DESASTER_LOGDIR "/var/log/desaster" CACHE PATH "log directory")
+set(DESASTER_STATEDIR "/var/lib/desaster" CACHE PATH "state directory")
 
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 

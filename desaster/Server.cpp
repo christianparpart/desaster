@@ -38,6 +38,7 @@ Server::Server(ev::loop_ref loop) :
 	loop_(loop),
 	logFileName_(pathcat(DESASTER_LOGDIR, "desaster.log")),
 	modules_(),
+	rootBucket_(new qdisc::htb(0)),
 	queues_(),
 	terminateSignal_(loop_),
 	interruptSignal_(loop_)
@@ -52,21 +53,6 @@ Server::~Server()
 
 	while (!modules_.empty())
 		delete unregisterModule(*modules_.begin());
-}
-
-Module* Server::registerModule(Module* m)
-{
-	modules_.push_back(m);
-	return m;
-}
-
-Module* Server::unregisterModule(Module* m)
-{
-	auto i = std::find(modules_.begin(), modules_.end(), m);
-	if (i != modules_.end())
-		modules_.erase(i);
-
-	return m;
 }
 
 bool Server::start(int argc, char* argv[])
@@ -199,6 +185,54 @@ void Server::stop()
 		loop_.ref();
 		interruptSignal_.stop();
 	}
+}
+
+Module* Server::registerModule(Module* m)
+{
+	modules_.push_back(m);
+	return m;
+}
+
+Module* Server::unregisterModule(Module* m)
+{
+	auto i = std::find(modules_.begin(), modules_.end(), m);
+	if (i != modules_.end())
+		modules_.erase(i);
+
+	return m;
+}
+
+Worker* Server::registerWorker(Worker* worker)
+{
+	// TODO
+	rootBucket_->reserve(rootBucket_->capacity() + 1);
+	return worker;
+}
+
+Worker* Server::unregisterWorker(Worker* worker)
+{
+	// TODO
+	rootBucket_->reserve(rootBucket_->capacity() - 1);
+	return worker;
+}
+
+Queue* Server::createQueue(const std::string& name)
+{
+	if (Queue* queue = findQueue(name))
+		return queue;
+
+	Queue* queue = new Queue(*this, name);
+	queues_.push_back(queue);
+	return queue;
+}
+
+Queue* Server::findQueue(const std::string& name) const
+{
+	for (auto queue: queues_)
+		if (queue->name() == name)
+			return queue;
+
+	return nullptr;
 }
 
 void Server::terminateSignal(ev::sig& sig, int revents)

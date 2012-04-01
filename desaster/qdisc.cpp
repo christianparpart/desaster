@@ -17,6 +17,15 @@ bucket::~bucket()
 {
 }
 
+bool bucket::reserve(size_t capacity)
+{
+	if (capacity < available_)
+		return false;
+
+	capacity_ = capacity;
+	return true;
+}
+
 std::string bucket::str() const
 {
 	char buf[256];

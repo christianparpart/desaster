@@ -2,6 +2,7 @@
 #define desaster_Server_h (1)
 
 #include <desaster/Logging.h>
+#include <desaster/qdisc.h>
 #include <string>
 #include <vector>
 #include <list>
@@ -10,6 +11,7 @@
 
 class Job;
 class Queue;
+class Worker;
 class Module;
 
 class Server :
@@ -19,6 +21,7 @@ private:
 	ev::loop_ref loop_;
 	std::string logFileName_;
 	std::list<Module*> modules_;
+	qdisc::htb* rootBucket_;
 	std::vector<Queue*> queues_;
 	ev::sig terminateSignal_;
 	ev::sig interruptSignal_;
@@ -31,6 +34,7 @@ public:
 	~Server();
 
 	ev::loop_ref loop() const { return loop_; }
+	qdisc::htb& rootBucket() const { return *rootBucket_; }
 
 	bool start(int argc, char* argv[]);
 	void stop();
@@ -38,6 +42,9 @@ public:
 	Module* registerModule(Module* module);
 	Module* unregisterModule(Module* module);
 	template<typename T> T* module() const;
+
+	Worker* registerWorker(Worker* worker);
+	Worker* unregisterWorker(Worker* worker);
 
 	Queue* createQueue(const std::string& name);
 	Queue* findQueue(const std::string& name) const;

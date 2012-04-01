@@ -3,16 +3,18 @@
 
 #include <deque>
 #include <desaster/qdisc.h>
+#include <desaster/Logging.h>
 
 class Job;
 class Server;
 
-class Queue
+class Queue :
+	public Logging
 {
 private:
 	Server& server_;
 	std::string name_;
-	qdisc::bucket* bucket_;
+	qdisc::htb::node* bucket_;
 	std::deque<Job*> jobs_;
 
 	friend class Job;
@@ -27,10 +29,15 @@ public:
 	void enqueue(Job* job);
 	Job* dequeue();
 
+	bool empty() const { return jobs_.empty(); }
 	size_t size() const { return jobs_.size(); }
 
-	qdisc::bucket* bucket() const { return bucket_; }
-	void setBucket(qdisc::bucket* bucket) { bucket_ = bucket; }
+	// shaping
+	size_t actualRate() const { return bucket_->actual_rate(); }
+	size_t rate() const { return bucket_->rate(); }
+	size_t ceil() const { return bucket_->ceil(); }
+
+	qdisc::htb::node* bucket() const { return bucket_; }
 
 private:
 	void notifyComplete(Job* job, bool success);
