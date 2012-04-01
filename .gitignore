@@ -9,7 +9,7 @@ config.h
 desaster/libsd-daemon.a
 desaster/desaster
 playground/iterate-network-interfaces
-playground/t
+playground/if-list
 playground/udp-broadcaster
 playground/udp-receiver
 playground/zmq1

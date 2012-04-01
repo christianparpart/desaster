@@ -101,7 +101,7 @@ std::list<NetInterface> getNetworkInterfaces()
 
 int main(void)
 {
-	for (auto& dev: getNetworkInterfaces()) {
+	for (const auto& dev: getNetworkInterfaces()) {
 		printf("%s: %s broadcast:%s flags:%s\n",
 			dev.name.c_str(),
 			dev.ipaddr_str().c_str(),
