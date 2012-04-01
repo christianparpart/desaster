@@ -7,4 +7,5 @@ add_executable(if-list if-list.cpp)
 add_executable(udp-broadcaster udp-broadcaster.cpp)
 add_executable(udp-receiver udp-receiver.cpp)
 
-add_executable(qdisc-test qdisc-test.cpp ${CMAKE_SOURCE_DIR}/desaster/qdisc.cpp)
+add_executable(qdisc-test qdisc-test.cpp)
+target_link_libraries(qdisc-test qdisc)
