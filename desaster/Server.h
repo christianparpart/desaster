@@ -16,37 +16,10 @@ class Server :
 	public Logging
 {
 private:
-	enum class State {
-		Stopped,
-		BroadcastingForPeers,
-		Running,
-		ShuttingDown,
-	};
-
-	enum class SchedulerRole {
-		Master,
-		Slave
-	};
-
-	State state_;
-	SchedulerRole schedulerRole_;
-	std::string clusterGroup_;
-
 	ev::loop_ref loop_;
-
-	ev::io peeringWatcher_;
-	ev::timer peeringTimer_;
-	int peeringAttemptTimeout_;
-	int peeringAttemptCount_;
-	int peeringAttemptMax_;
-
-	int port_;
-	std::string bindAddress_;
-	std::string brdAddress_;
-
+	std::string logFileName_;
 	std::list<Module*> modules_;
 	std::vector<Queue*> queues_;
-
 	ev::sig terminateSignal_;
 	ev::sig interruptSignal_;
 
@@ -59,28 +32,19 @@ public:
 
 	ev::loop_ref loop() const { return loop_; }
 
-	bool setup(int argc, char* argv[]);
+	bool start(int argc, char* argv[]);
 	void stop();
 
-	bool isMaster() const { return schedulerRole_ == SchedulerRole::Master; }
+	Module* registerModule(Module* module);
+	Module* unregisterModule(Module* module);
+	template<typename T> T* module() const;
 
 	Queue* createQueue(const std::string& name);
 	Queue* findQueue(const std::string& name) const;
 
-	Module* registerModule(Module* module);
-	Module* unregisterModule(Module* module);
-
-	template<typename T> T* module() const { // {{{
-		for (auto module: modules_)
-			if (T* u = dynamic_cast<T*>(module))
-				return u;
-
-		return nullptr;
-	} // }}}
-
 private:
-	Queue* unlink(Queue* queue);
 	Module* unlink(Module* module);
+	Queue* unlink(Queue* queue);
 
 private:
 	void printHelp();
@@ -88,5 +52,15 @@ private:
 	void terminateSignal(ev::sig& signal, int revents);
 	void interruptSignal(ev::sig& signal, int revents);
 };
+
+template<typename T>
+T* Server::module() const
+{
+	for (auto module: modules_)
+		if (T* u = dynamic_cast<T*>(module))
+			return u;
+
+	return nullptr;
+}
 
 #endif

@@ -43,7 +43,7 @@ bool NetworkAdapter::configure(int port, const std::string& bindAddress)
 
 bool NetworkAdapter::start()
 {
-	notice("NetworkAdapter: Setting up listener at tcp://%s:%d", bindAddress_.c_str(), port_);
+	notice("Setting up listener at tcp://%s:%d", bindAddress_.c_str(), port_);
 
 	int fd = ::socket(AF_INET, SOCK_STREAM, 0);
 	if (fd < 0) {

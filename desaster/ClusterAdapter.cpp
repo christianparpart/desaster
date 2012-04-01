@@ -39,6 +39,16 @@ ClusterAdapter::~ClusterAdapter()
 	// otherwise notify master that we're shutting down hard.
 }
 
+void ClusterAdapter::setGroupName(const std::string& value)
+{
+	groupName_ = value;
+}
+
+void ClusterAdapter::setPort(int value)
+{
+	port_ = value;
+}
+
 bool ClusterAdapter::start()
 {
 	return true;

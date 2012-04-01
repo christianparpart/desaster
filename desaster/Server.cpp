@@ -6,6 +6,8 @@
 #include <desaster/NetworkAdapter.h>
 #include <desaster/ClusterAdapter.h>
 
+#include "sd-daemon.h"
+
 #include <iostream>
 #include <algorithm>
 #include <ctime>
@@ -18,29 +20,28 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <getopt.h>
+
+/** concats a path with a filename and optionally inserts a path seperator if path 
+ *  doesn't contain a trailing path seperator. */
+static inline std::string pathcat(const std::string& path, const std::string& filename)
+{
+	if (!path.empty() && path[path.size() - 1] != '/')
+		return path + "/" + filename;
+	else
+		return path + filename;
+}
 
 Server::Server(ev::loop_ref loop) :
 	Logging("core"),
 	loop_(loop),
-	port_(2691),
-	bindAddress_("0.0.0.0"),
-	brdAddress_("255.255.255.255"),
+	logFileName_(pathcat(DESASTER_LOGDIR, "desaster.log")),
 	modules_(),
 	queues_(),
 	terminateSignal_(loop_),
 	interruptSignal_(loop_)
 {
-	terminateSignal_.set<Server, &Server::terminateSignal>(this);
-	terminateSignal_.set(SIGTERM);
-	terminateSignal_.start();
-	loop_.unref();
-
-	interruptSignal_.set<Server, &Server::interruptSignal>(this);
-	interruptSignal_.set(SIGINT);
-	interruptSignal_.start();
-	loop_.unref();
-
 	registerModule(new NetworkAdapter(this));
 	registerModule(new ClusterAdapter(this));
 }
@@ -68,10 +69,12 @@ Module* Server::unregisterModule(Module* m)
 	return m;
 }
 
-bool Server::setup(int argc, char* argv[])
+bool Server::start(int argc, char* argv[])
 {
 	static const struct option long_options[] = {
 		{ "help", no_argument, nullptr, 'h' },
+		{ "daemonize", required_argument, nullptr, 'd' },
+		{ "log", required_argument, nullptr, 'l' },
 		{ "port", required_argument, nullptr, 'p' },
 		{ "bind-address", required_argument, nullptr, 'a' },
 		{ "cluster-broadcast-address", required_argument, nullptr, 'B' },
@@ -89,18 +92,22 @@ bool Server::setup(int argc, char* argv[])
 	// cluster adapter
 	std::string clusterAddress;
 	std::string clusterBrdAddress;
-	std::string clusterGroup;
-	int clusterPort = -1;
-	bool standalone = false;
+	bool daemonize = false;
 
 	for (bool done = false; !done;) {
 		int long_index = 0;
 
-		switch (getopt_long(argc, argv, "?ha:p:A:B:P:G:S", long_options, &long_index)) {
+		switch (getopt_long(argc, argv, "?hdl:a:p:A:B:P:G:S", long_options, &long_index)) {
 			case '?':
 			case 'h':
 				printHelp();
 				return false;
+			case 'd':
+				daemonize = true;
+				break;
+			case 'l':
+				logFileName_ = optarg;
+				break;
 			case 'a':
 				bindAddress = optarg;
 				break;
@@ -114,13 +121,13 @@ bool Server::setup(int argc, char* argv[])
 				clusterBrdAddress = optarg;
 				break;
 			case 'P':
-				clusterPort = atoi(optarg);
+				module<ClusterAdapter>()->setPort(atoi(optarg));
 				break;
 			case 'G':
-				clusterGroup = optarg;
+				module<ClusterAdapter>()->setGroupName(optarg);
 				break;
 			case 'S':
-				standalone = true;
+				//module<ClusterAdapter>()->setMode(ClusterMode::Standalone);
 				break;
 			case 0:
 				// long opt with val != NULL
@@ -133,12 +140,47 @@ bool Server::setup(int argc, char* argv[])
 		}
 	}
 
+	if (daemonize && (getppid() != 1 || !sd_booted())) {
+		// redirect stdio only when daemonizing and not controlled by systemd
+		int nullFd = open("/dev/null", O_RDONLY);
+		if (nullFd < 0) {
+			error("Could not open /dev/null: %s", strerror(errno));
+			return false;
+		}
+
+		int logFd = open(logFileName_.c_str(), O_CREAT | O_WRONLY | O_APPEND, 0666);
+		if (logFd < 0) {
+			error("Could not open %s: %s", logFileName_.c_str(), strerror(errno));
+			close(nullFd);
+			return false;
+		}
+
+		close(STDIN_FILENO);
+		dup2(nullFd, STDIN_FILENO);
+
+		close(STDOUT_FILENO);
+		dup2(logFd, STDOUT_FILENO);
+
+		close(STDERR_FILENO);
+		dup2(logFd, STDOUT_FILENO);
+	}
+
 	if (!module<NetworkAdapter>()->configure(port, bindAddress))
 		return false;
 
 	for (auto module: modules_)
 		if (!module->start())
 			return false;
+
+	terminateSignal_.set<Server, &Server::terminateSignal>(this);
+	terminateSignal_.set(SIGTERM);
+	terminateSignal_.start();
+	loop_.unref();
+
+	interruptSignal_.set<Server, &Server::interruptSignal>(this);
+	interruptSignal_.set(SIGINT);
+	interruptSignal_.start();
+	loop_.unref();
 
 	return true;
 }
@@ -180,20 +222,30 @@ void Server::printHelp()
 		"Copyright (c) 2012 by Christian Parpart <trapni@gentoo.org>\n"
 		"Licensed under GPL-3 [http://gplv3.fsf.org/]\n"
 		"\n"
-		" usage: desaster [-a BIND_ADDR] [-b BROADCAST_ADDR] [-p PORT] [-k GROUP_KEY]\n"
+		" usage: desaster [options ...]\n"
 		"\n"
-		" -?, -h, --help                 prints this help\n"
-		" -p, --port=NUMBER              port number for receiving/sending packets [%d]\n"
-		" -a, --bind-address=IPADDR      local IP address to bind to [%s]\n"
-		" -b, --broadcast-address=IPADDR remote IP/multicast/broadcast address to announce to [%s]\n"
-		" -k, --key=GROUP_KEY            cluster-group shared key [%s]\n"
-		" -s, --standalone               do not broadcast for peering with cluster\n"
+		" -?, -h, --help                         prints this help\n"
+		" -d, --daemonize                        fork into background\n"
+		" -l, --log=PATH                         path to log file [%s]\n"
+		"\n"
+		" -a, --bind-address=IPADDR              local IP address to bind to [%s]\n"
+		" -p, --port=NUMBER                      port number for receiving/sending packets [%d]\n"
+		"\n"
+		" -K, --cluster-group=GROUP_KEY          cluster-group shared key [%s]\n"
+		" -K, --cluster-bind-address             cluster syncronization bind address [%s]\n"
+		" -B, --cluster-broadcast-address=IPADDR remote IP/multicast/broadcast address to\n"
+		"                                        announce to [%s]\n"
+		" -P, --cluster-port=NUMBER              clsuter tcp/udp port number [%d]\n"
+		" -S, --standalone                       do not broadcast for peering with cluster\n"
 		"\n",
 		PACKAGE_VERSION,
 		homepageUrl,
-		module<NetworkAdapter>()->port(),
+		logFileName_.c_str(),
 		module<NetworkAdapter>()->bindAddress().c_str(),
+		module<NetworkAdapter>()->port(),
+		module<ClusterAdapter>()->groupName().c_str(),
+		module<ClusterAdapter>()->bindAddress().c_str(),
 		module<ClusterAdapter>()->brdAddress().c_str(),
-		module<ClusterAdapter>()->groupName().c_str()
+		module<ClusterAdapter>()->port()
 	);
 }

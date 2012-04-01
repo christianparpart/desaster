@@ -6,7 +6,7 @@ int main(int argc, char* argv[])
 	ev::default_loop loop;
 	Server server(loop);
 
-	if (!server.setup(argc, argv))
+	if (!server.start(argc, argv))
 		return 1;
 
 	loop.run();

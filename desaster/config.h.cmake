@@ -3,6 +3,7 @@
 
 #cmakedefine PACKAGE_NAME "@PACKAGE_NAME@"
 #cmakedefine PACKAGE_VERSION "@PACKAGE_VERSION@"
+#cmakedefine DESASTER_LOGDIR "@DESASTER_LOGDIR@"
 
 #cmakedefine HAVE_SYS_RESOURCE_H
 #cmakedefine HAVE_SYS_MMAN_H

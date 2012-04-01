@@ -47,9 +47,13 @@ public:
 	~ClusterAdapter();
 
 	const std::string groupName() const { return groupName_; }
+	void setGroupName(const std::string& name);
+
 	const std::string& brdAddress() const { return brdAddress_; }
-	const std::string address() const { return bindAddress_; }
+	const std::string bindAddress() const { return bindAddress_; }
+
 	int port() const { return port_; }
+	void setPort(int value);
 
 	virtual bool start();
 	virtual void stop();
