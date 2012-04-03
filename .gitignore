@@ -8,6 +8,7 @@ cmake_install.cmake
 config.h
 desaster/libsd-daemon.a
 desaster/desaster
+desaster-cli/desaster-cli
 playground/iterate-network-interfaces
 playground/if-list
 playground/udp-broadcaster

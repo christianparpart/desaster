@@ -23,10 +23,6 @@ if test x$1 = xmudflap; then
 	export MUDFLAP_OPTIONS='-mode-check -mode-populate'
 fi
 
-# assume proper autotool versions
-#export WANT_AUTOCONF=2.5
-#export WANT_AUTOMAKE=1.10
-
 # add colorgcc to PATH
 if [ -d /usr/lib/colorgcc/bin ]; then
 	if ! echo ${PATH} | grep colorgcc/bin &>/dev/null; then
@@ -35,3 +31,5 @@ if [ -d /usr/lib/colorgcc/bin ]; then
 fi
 
 ulimit -c unlimited
+
+export DESASTER_DEBUG='*'

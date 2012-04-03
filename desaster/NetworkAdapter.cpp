@@ -1,5 +1,9 @@
 #include <desaster/NetworkAdapter.h>
+#include <desaster/NetMessage.h>
 #include <desaster/Server.h>
+#include <desaster/Module.h>
+#include <desaster/Queue.h>
+#include <desaster/Job.h>
 
 #include <iostream>
 #include <algorithm>
@@ -7,6 +11,7 @@
 #include <cstring>
 #include <cstdio>
 #include <cstdlib>
+#include <cstdarg>
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -51,14 +56,35 @@ bool NetworkAdapter::start()
 		return false;
 	}
 
+	int rc = 0;
+#if defined(SO_REUSEADDR)
+	if (::setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &rc, sizeof(rc)) < 0) {
+		perror("setsockopt");
+		return false;
+	}
+#endif
+
+#if defined(TCP_QUICKACK)
+	if (::setsockopt(fd, SOL_TCP, TCP_QUICKACK, &rc, sizeof(rc)) < 0) {
+		perror("setsockopt");
+		return false;
+	}
+#endif
+
+#if defined(TCP_DEFER_ACCEPT) && defined(WITH_TCP_DEFER_ACCEPT)
+	if (::setsockopt(fd, SOL_TCP, TCP_DEFER_ACCEPT, &rc, sizeof(rc)) < 0) {
+		perror("setsockopt");
+		return false;
+	}
+#endif
+
 	struct sockaddr_in sin;
 	memset(&sin, 0, sizeof(sin));
 	sin.sin_family = AF_INET;
 	sin.sin_port = htons(port_);
 
-	int rv;
-	if ((rv = inet_pton(AF_INET, bindAddress_.c_str(), &sin.sin_addr.s_addr)) <= 0) {
-		if (rv == 0)
+	if ((rc = inet_pton(AF_INET, bindAddress_.c_str(), &sin.sin_addr.s_addr)) <= 0) {
+		if (rc == 0)
 			error("Address not in representation format.");
 		else
 			perror("inet_pton");
@@ -66,15 +92,15 @@ bool NetworkAdapter::start()
 		return false;
 	}
 
-	rv = bind(fd, (sockaddr*)&sin, sizeof(sin));
-	if (rv < 0) {
+	rc = bind(fd, (sockaddr*)&sin, sizeof(sin));
+	if (rc < 0) {
 		perror("bind");
 		close(fd);
 		return false;
 	}
 
-	rv = listen(fd, backlog_);
-	if (rv < 0) {
+	rc = listen(fd, backlog_);
+	if (rc < 0) {
 		perror("listen");
 		close(fd);
 		return false;
@@ -127,28 +153,55 @@ void NetworkAdapter::handleCommand(Connection* con, const char* cmd, const char*
 	if (i != commands_.end()) {
 		(this->*(i->second))(con, arg);
 	} else {
-		con->write("-ERR Unknown command\n");
+		con->writeError("Unknown command");
 	}
 }
 
 void NetworkAdapter::createQueue(Connection* c, const char* arg)
 {
 	debug("creating queue");
+	c->writeStatus("OK");
 }
 
 void NetworkAdapter::listQueues(Connection* c, const char* arg)
 {
-	debug("list queues");
+	c->writeArrayHeader(server().queues().size());
+	for (auto queue: server().queues()) {
+		c->writeMessage(
+			queue->name().c_str(),
+			queue->actualRate(),
+			queue->rate(),
+			queue->ceil(),
+			queue->size()
+		);
+	}
 }
 
 void NetworkAdapter::showQueue(Connection* c, const char* arg)
 {
-	debug("show queue");
+	Queue* queue = server().findQueue(arg);
+	if (!queue) {
+		c->writeError("Queue not found");
+		return;
+	}
+
+	c->writeMessage(
+		queue->actualRate(),
+		queue->rate(),
+		queue->ceil(),
+		queue->size()
+	);
 }
 
 void NetworkAdapter::destroyQueue(Connection* c, const char* arg)
 {
-	debug("show queue");
+	debug("destroy queue");
+	c->writeError("not implemented yet");
+}
+
+void NetworkAdapter::createJob(Connection* c, const char* arg)
+{
+	c->writeError("not implemented yet");
 }
 // }}}
 // {{{ NetworkAdapter::Connection
@@ -158,8 +211,12 @@ NetworkAdapter::Connection::Connection(NetworkAdapter* adapter, int fd) :
 	watcher_(adapter->server().loop()),
 	timeout_(adapter->server().loop()),
 	messageCount_(0),
+	readBuffer_(),
+	readPos_(0),
+	parser_(&readBuffer_),
 	writeBuffer_(),
-	writePos_(0)
+	writePos_(0),
+	writer_()
 {
 	watcher_.set<Connection, &Connection::io>(this);
 	timeout_.set<Connection, &Connection::timeout>(this);
@@ -180,8 +237,13 @@ void NetworkAdapter::Connection::startRead()
 
 void NetworkAdapter::Connection::startWrite()
 {
-	if (watcher_.is_active())
+	if (watcher_.is_active()) {
+		if (watcher_.events & ev::WRITE) // already watching for write-events?
+			return;
+
 		watcher_.stop();
+	}
+
 	watcher_.set(fd_, ev::WRITE);
 	watcher_.start();
 
@@ -216,8 +278,8 @@ void NetworkAdapter::Connection::io(ev::io&, int revents)
 
 bool NetworkAdapter::Connection::handleRead()
 {
-	char cmd[4096];
-	ssize_t rv = ::read(fd_, cmd, sizeof(cmd));
+	char buf[4096];
+	ssize_t rv = ::read(fd_, buf, sizeof(buf));
 
 	if (rv < 0) {
 		perror("read");
@@ -228,37 +290,47 @@ bool NetworkAdapter::Connection::handleRead()
 		delete this;
 		return false;
 	} else {
-		// strip right
-		while (rv > 0 && std::isspace(cmd[rv - 1]))
-			--rv;
-		cmd[rv] = '\0';
+		readBuffer_.push_back(buf, rv);
 
-		// split args off the command 
-		char *arg = std::strchr(cmd, ' ');
-		if (arg) {
-			*arg = '\0';
-			++arg;
-		} else
-			arg = cmd + rv;
+		parser_.parse();
 
-		adapter_->handleCommand(this, cmd, arg);
+		if (parser_.state() == NetMessageParser::MESSAGE_END) {
+			handleCommand();
+		} else {
+			adapter_->debug("parsed partial message up to: %s (%d)", parser_.state_str(), parser_.state());
+		}
 
 		return true;
 	}
 }
 
-void NetworkAdapter::Connection::write(const char* message)
+void NetworkAdapter::Connection::handleCommand()
 {
-	writeBuffer_ << message;
-	startWrite();
+	NetMessage* message = parser_.message();
+
+	if (!message->isArray()) {
+		writeError("Wrong message type");
+		return;
+	}
+
+	size_t n = message->size();
+	std::vector<const char*> args(n - 1);
+	for (size_t i = 0; i < args.size(); ++i) {
+		const NetMessage& arg = message->toArray()[i + 1];
+		if (arg.isString())
+			args[i] = arg.toString();
+		else if (arg.isNil())
+			args[i] = nullptr;
+		else {
+			writeError("Wrong message type");
+			return;
+		}
+	}
 }
 
 bool NetworkAdapter::Connection::handleWrite()
 {
-	std::stringbuf* buf = writeBuffer_.rdbuf();
-	const char* p = &buf->str()[writePos_];
-
-	ssize_t rv = ::write(fd_, p, writeBuffer_.tellp() - writePos_);
+	ssize_t rv = ::write(fd_, writeBuffer_.data() + writePos_, writeBuffer_.size() - writePos_);
 	if (rv < 0) {
 		perror("write");
 		return false;
@@ -266,8 +338,8 @@ bool NetworkAdapter::Connection::handleWrite()
 
 	writePos_ += rv;
 
-	if (writePos_ == writeBuffer_.tellp()) {
-		writeBuffer_.seekp(0);
+	if (writePos_ == writeBuffer_.size()) {
+		writeBuffer_.clear();
 		writePos_ = 0;
 		startRead();
 	}
@@ -278,5 +350,31 @@ void NetworkAdapter::Connection::timeout(ev::timer&, int revents)
 {
 	adapter_->info("Connection timed out.");
 	delete this;
+}
+
+void NetworkAdapter::Connection::writeStatus(const char* fmt, ...)
+{
+	va_list va;
+	char buf[4096];
+
+	va_start(va, fmt);
+	vsnprintf(buf, sizeof(buf), fmt, va);
+	va_end(va);
+
+	NetMessageWriter::writeStatus(writeBuffer_, buf);
+	startWrite();
+}
+
+void NetworkAdapter::Connection::writeError(const char* fmt, ...)
+{
+	va_list va;
+	char buf[4096];
+
+	va_start(va, fmt);
+	vsnprintf(buf, sizeof(buf), fmt, va);
+	va_end(va);
+
+	NetMessageWriter::writeError(writeBuffer_, buf);
+	startWrite();
 }
 // }}}

@@ -1,5 +1,5 @@
 #include <desaster/shell/ShellWorker.h>
-#include <desaster/shell/ShellJob.h>
+#include <desaster/Job.h>
 
 #include <sys/types.h>
 #include <unistd.h>
@@ -27,21 +27,19 @@ void ShellWorker::perform()
 void ShellWorker::setupChild()
 {
 	close(0);
-	dup2(0, open("/dev/null", O_RDONLY));
+	dup2(open("/dev/null", O_RDONLY), 0);
 
-	close(1);
-	dup2(1, output_.writeFd());
+	close(STDOUT_FILENO);
+	dup2(output_.writeFd(), STDOUT_FILENO);
 
-	close(2);
-	dup2(2, output_.writeFd());
-
-	auto j = job<ShellJob>();
+	close(STDERR_FILENO);
+	dup2(output_.writeFd(), STDERR_FILENO);
 
 	char** argv = new char* [2];
-	argv[0] = const_cast<char*>(j->command().c_str());
+	argv[0] = const_cast<char*>(job()->text().c_str());
 	argv[1] = nullptr;
 
-	execvp(j->command().c_str(), argv);
+	execvp(job()->text().c_str(), argv);
 
 	// only reached on error.
 	perror("execvp");

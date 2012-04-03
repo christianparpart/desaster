@@ -48,6 +48,7 @@ public:
 
 	Queue* createQueue(const std::string& name);
 	Queue* findQueue(const std::string& name) const;
+	const std::vector<Queue*>& queues() const { return queues_; }
 
 private:
 	Module* unlink(Module* module);

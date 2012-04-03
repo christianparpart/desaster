@@ -2,6 +2,8 @@
 #define desaster_NetworkAdapter_h
 
 #include <desaster/Module.h>
+#include <desaster/NetMessage.h>
+#include <desaster/Buffer.h>
 
 #include <string>
 #include <sstream>
@@ -54,6 +56,8 @@ private:
 	void listQueues(Connection* c, const char* arg);
 	void showQueue(Connection* c, const char* arg);
 	void destroyQueue(Connection* c, const char* arg);
+
+	void createJob(Connection* c, const char* arg);
 };
 
 /*!
@@ -72,8 +76,13 @@ private:
 	ev::timer timeout_;
 	unsigned long long messageCount_;
 
-	std::stringstream writeBuffer_;
-	ssize_t writePos_;
+	Buffer readBuffer_;
+	size_t readPos_;
+	NetMessageParser parser_;
+
+	Buffer writeBuffer_;
+	size_t writePos_;
+	NetMessageWriter writer_;
 
 public:
 	Connection(NetworkAdapter * server, int fd);
@@ -81,7 +90,11 @@ public:
 	Connection& operator=(const Connection&) = delete;
 	~Connection();
 
-	void write(const char* message);
+	inline void writeArrayHeader(size_t arraySize);
+	template<typename... Args> void writeMessage(Args... args);
+	template<typename Arg> void writeValue(Arg arg);
+	void writeError(const char* fmt, ...);
+	void writeStatus(const char* fmt, ...);
 
 private:
 	void io(ev::io& io, int revents);
@@ -93,7 +106,29 @@ private:
 	void startWrite();
 	bool handleWrite();
 
-	void handleCommand(const char* cmd, const char* arg);
+	void handleCommand();
 }; // }}}
+
+// {{{ inlines
+inline void NetworkAdapter::Connection::writeArrayHeader(size_t arraySize)
+{
+	NetMessageWriter::writeArrayHeader(writeBuffer_, arraySize);
+	startWrite();
+}
+
+template<typename... Args>
+inline void NetworkAdapter::Connection::writeMessage(Args... args)
+{
+	NetMessageWriter::write(writeBuffer_, args...);
+	startWrite();
+}
+
+template<typename Arg>
+inline void NetworkAdapter::Connection::writeValue(Arg arg)
+{
+	NetMessageWriter::writeValue(writeBuffer_, arg);
+	startWrite();
+}
+// }}}
 
 #endif

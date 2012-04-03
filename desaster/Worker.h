@@ -1,13 +1,14 @@
 #ifndef desaster_Worker_h
 #define desaster_Worker_h
 
-#include "Pipe.h"
+#include <desaster/Logging.h>
 #include <ev++.h>
 
 class Server;
 class Job;
 
-class Worker
+class Worker :
+	public Logging
 {
 protected:
 	Server* server_;
@@ -18,9 +19,7 @@ public:
 	virtual ~Worker();
 
 	void assign(Job* job);
-
-	template<typename T>
-	const T* job() const { return dynamic_cast<const T*>(job_); }
+	const Job* job() const { return job_; }
 
 	bool busy() const { return job_ != nullptr; }
 	bool idle() const { return job_ == nullptr; }

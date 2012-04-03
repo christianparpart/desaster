@@ -7,6 +7,7 @@
 
 class Job;
 class Server;
+class Worker;
 
 class Queue :
 	public Logging
@@ -18,6 +19,7 @@ private:
 	std::deque<Job*> jobs_;
 
 	friend class Job;
+	friend class Worker;
 
 public:
 	Queue(Server& server, const std::string& name);

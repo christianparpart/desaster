@@ -1,5 +1,6 @@
-#include "Worker.h"
-#include "Job.h"
+#include <desaster/Worker.h>
+#include <desaster/Queue.h>
+#include <desaster/Job.h>
 
 // invoked by scheduler, to assign this worker a new job
 void Worker::assign(Job* job)
@@ -10,6 +11,6 @@ void Worker::assign(Job* job)
 
 void Worker::finish(bool success)
 {
+	job_->queue()->notifyComplete(job_, success);
 	job_ = nullptr;
-	// TODO notify scheduler about state change
 }

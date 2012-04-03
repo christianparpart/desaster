@@ -97,7 +97,7 @@ bool Logging::checkEnabled()
 		initialize();
 
 	// iterate through environment-supplied list of tokens
-	for (char* p: env_)
+	for (const char* p: env_)
 		if (strcmp(p, className_.c_str()) == 0 || strcmp(p, "*") == 0)
 			return true;
 

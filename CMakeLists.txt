@@ -55,6 +55,7 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
 add_subdirectory(desaster-web)
+add_subdirectory(desaster-cli)
 add_subdirectory(desaster)
 add_subdirectory(playground)
 
