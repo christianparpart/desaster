@@ -1,8 +1,15 @@
 #include <desaster/NetMessage.h>
+#include <memory>
 #include <cctype>
 
-//#define TRACE(msg...) { printf("NetMessage: " msg); printf("\n"); }
-#define TRACE(msg...) /*!*/ ((void)0)
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+
+#define TRACE(msg...) { printf("NetMessage: " msg); printf("\n"); }
+//#define TRACE(msg...) /*!*/ ((void)0)
 
 // {{{ NetMessage
 NetMessage::NetMessage() :
@@ -22,9 +29,17 @@ NetMessage::NetMessage(Type t, long long value) :
 	type_(t),
 	number_(value)
 {
+	if (type_ == Array) {
+		array_ = new NetMessage[value];
+	}
 }
 
 NetMessage::~NetMessage()
+{
+	clear();
+}
+
+void NetMessage::clear()
 {
 	switch (type_) {
 		case Status:
@@ -84,10 +99,45 @@ NetMessage* NetMessage::createArray(size_t size)
 {
 	return new NetMessage(Array, size);
 }
-// }}}
 
-// {{{ NetMessageParser
-const char* NetMessageParser::state_str() const
+void NetMessage::setNil()
+{
+	clear();
+}
+
+void NetMessage::setNumber(long long value)
+{
+	clear();
+
+	type_ = Number;
+	number_ = value;
+}
+
+void NetMessage::setString(const char* value, size_t size)
+{
+	clear();
+
+	type_ = String;
+	string_ = new char[size + 1];
+	memcpy(string_, value, size);
+	string_[size] = '\0';
+}
+
+void NetMessage::setArray(size_t size)
+{
+	clear();
+
+	type_ = Array;
+	number_ = size;
+
+	if (size)
+		array_ = new NetMessage[size];
+	else
+		array_ = nullptr;
+}
+// }}}
+// {{{ NetMessageReader
+const char* NetMessageReader::state_str() const
 {
 	switch (state()) {
 	case MESSAGE_BEGIN:
@@ -127,7 +177,7 @@ const char* NetMessageParser::state_str() const
 	}
 }
 
-NetMessageParser::NetMessageParser(const Buffer* buf) :
+NetMessageReader::NetMessageReader(const Buffer* buf) :
 	buffer_(buf),
 	pos_(0),
 	currentContext_(nullptr),
@@ -137,17 +187,18 @@ NetMessageParser::NetMessageParser(const Buffer* buf) :
 	pushContext(); // create root context
 }
 
-NetMessageParser::~NetMessageParser()
+NetMessageReader::~NetMessageReader()
 {
 }
 
-void NetMessageParser::parse()
+void NetMessageReader::parse()
 {
 	while (!isEndOfBuffer()) {
-		if (std::isprint(currentChar()))
-			TRACE("parse: '%c' (%d)", currentChar(), static_cast<int>(state()));
-		else
-			TRACE("parse: 0x%02X (%d)", currentChar(), static_cast<int>(state()));
+		if (std::isprint(currentChar())) {
+			TRACE("parse: '%c' (%d) %s", currentChar(), static_cast<int>(state()), state_str());
+		} else {
+			TRACE("parse: 0x%02X (%d) %s", currentChar(), static_cast<int>(state()), state_str());
+		}
 
 		switch (state()) {
 			case MESSAGE_BEGIN:
@@ -265,6 +316,7 @@ void NetMessageParser::parse()
 						break;
 					case '\r':
 						setState(MESSAGE_LF);
+						currentContext_->message = NetMessage::createArray(currentContext_->number);
 						nextChar();
 						break;
 					default:
@@ -381,7 +433,7 @@ void NetMessageParser::parse()
 				// there's garbage at the end of our message.
 				break;
 			case SYNTAX_ERROR:
-				fprintf(stderr, "Redis message syntax error at offset %zi\n", pos_);
+				fprintf(stderr, "NetMessageSocket message syntax error at offset %zi\n", pos_);
 				break;
 			default:
 				break;
@@ -389,14 +441,14 @@ void NetMessageParser::parse()
 	}
 }
 
-inline void NetMessageParser::nextChar()
+inline void NetMessageReader::nextChar()
 {
 	if (!isEndOfBuffer()) {
 		++pos_;
 	}
 }
 
-inline size_t NetMessageParser::nextChar(size_t n)
+inline size_t NetMessageReader::nextChar(size_t n)
 {
 	size_t avail = buffer_->size() - pos_;
 	n = std::min(n, avail);
@@ -404,12 +456,12 @@ inline size_t NetMessageParser::nextChar(size_t n)
 	return n;
 }
 
-inline BufferRef NetMessageParser::currentValue() const
+inline BufferRef NetMessageReader::currentValue() const
 {
 	return buffer_->ref(begin_, pos_ - begin_);
 }
 
-void NetMessageParser::pushContext()
+void NetMessageReader::pushContext()
 {
 	TRACE("pushContext:");
 	ParseContext* pc = new ParseContext();
@@ -419,7 +471,7 @@ void NetMessageParser::pushContext()
 	setState(MESSAGE_BEGIN);
 }
 
-void NetMessageParser::popContext()
+void NetMessageReader::popContext()
 {
 	TRACE("popContext:");
 	ParseContext* pc = currentContext_;
@@ -438,125 +490,232 @@ void NetMessageParser::popContext()
 	delete pc;
 }
 // }}}
-#if 0
-// {{{ Redis
-Redis::Redis(struct ev_loop* loop) :
+// {{{ NetMessageSocket
+NetMessageSocket::NetMessageSocket(ev::loop_ref loop, int fd, bool autoClose) :
+	Logging("NetMessageSocket[fd:%d]", fd),
 	loop_(loop),
-	socket_(new Socket(loop)),
-	buf_(),
-	flushPos_(0)
+	socketWatcher_(loop_),
+	socketTimer_(loop),
+	fd_(fd),
+	autoClose_(autoClose),
+	writeBuffer_(),
+	writePos_(0),
+	readBuffer_(),
+	readPos_(0),
+	reader_(&readBuffer_),
+	receiveHook_()
 {
+	socketWatcher_.set<NetMessageSocket, &NetMessageSocket::io>(this);
+	socketTimer_.set<NetMessageSocket, &NetMessageSocket::timeout>(this);
+
+	startRead();
 }
 
-Redis::~Redis()
+NetMessageSocket::NetMessageSocket(ev::loop_ref loop, const std::string& hostname, int port) :
+	Logging("NetMessageSocket[%s:%d]", hostname.c_str(), port),
+	loop_(loop),
+	socketWatcher_(loop_),
+	socketTimer_(loop),
+	fd_(-1),
+	autoClose_(true),
+	writeBuffer_(),
+	writePos_(0),
+	readBuffer_(),
+	readPos_(0),
+	reader_(&readBuffer_),
+	receiveHook_()
+{
+	socketWatcher_.set<NetMessageSocket, &NetMessageSocket::io>(this);
+	socketTimer_.set<NetMessageSocket, &NetMessageSocket::timeout>(this);
+
+	open(hostname, port);
+}
+
+NetMessageSocket::~NetMessageSocket()
 {
 	close();
-	delete socket_;
 }
 
-void Redis::open(const char* hostname, int port)
+/*! opens a connection to a remote server at given \p hostname and \p port number.
+ *
+ * \param hostname the hostname of the host to connect to.
+ * \param port the TCP port number to connect to.
+ *
+ * \throw ConnectError if connection to given host failed.
+ *
+ * \todo asynchronous/nonblocking connect()
+ * \todo DNS resolving
+ */
+void NetMessageSocket::open(const std::string& hostname, int port)
 {
-	socket_->openTcp(hostname, port);
+	int fd = socket(AF_INET, SOCK_STREAM, 0);
+	if (fd < 0)
+		throw ConnectError("socket", errno);
+
+	sockaddr_in sin;
+	memset(&sin, 0, sizeof(sin));
+	sin.sin_family = AF_INET;
+	sin.sin_port = htons(port);
+
+	// TODO support DNS resolving.
+	int rc;
+	if ((rc = inet_pton(AF_INET, hostname.c_str(), &sin.sin_addr.s_addr)) <= 0) {
+		::close(fd);
+		if (rc == 0)
+			throw ConnectError("Address not in representation format.");
+		else
+			throw ConnectError("inet_pton", errno);
+	}
+
+	rc = connect(fd, (sockaddr*)&sin, sizeof(sin));
+	if (rc < 0) {
+		perror("connect");
+		::close(fd);
+		throw ConnectError("connect", errno);
+	}
+
+	fd_ = fd;
 }
 
-void Redis::open(const IPAddress& ipaddr, int port)
+void NetMessageSocket::close()
 {
-	socket_->openTcp(ipaddr, port);
+	if (socketWatcher_.is_active())
+		socketWatcher_.stop();
+
+	if (socketTimer_.is_active())
+		socketTimer_.stop();
+
+	if (autoClose_ && !(fd_ < 0)) {
+		::close(fd_);
+		fd_ = -1;
+	}
 }
 
-bool Redis::isOpen() const
+void NetMessageSocket::io(ev::io&, int revents)
 {
-	return socket_ && socket_->isOpen();
+	debug("I/O event received: 0x%04x", revents);
+	socketTimer_.stop();
+
+	if (revents & ev::READ)
+		if (!handleRead())
+			return;
+
+	if (revents & ev::WRITE)
+		if (!handleWrite())
+			return;
+
+	socketTimer_.start(30, 0);
 }
 
-void Redis::close()
+void NetMessageSocket::timeout(ev::timer&, int revents)
 {
-	if (!isOpen())
-		return;
-
-	socket_->close();
+	debug("I/O operation timed out");
 }
 
-bool Redis::select(int dbi)
+void NetMessageSocket::startWrite()
 {
-	writeMessage("SELECT", dbi);
-	flush();
+	if (socketWatcher_.is_active()) {
+		if (socketWatcher_.events & ev::WRITE)
+			return;
 
-	buf_.clear();
-	socket_->read(buf_);
+		socketWatcher_.stop();
+	}
 
-	if (buf_ == "+OK\r\n")
-		return true;
+	socketWatcher_.set(fd_, ev::WRITE);
+	socketWatcher_.start();
 
-	return false;
+	if (socketTimer_.is_active())
+		socketTimer_.stop();
+
+	socketTimer_.start(30, 0);
 }
 
-bool Redis::set(const char* key, const char* value)
+bool NetMessageSocket::handleWrite()
 {
-	writeMessage("SET", key, value);
-	flush();
+	ssize_t rc = ::write(fd_, writeBuffer_.data() + writePos_, writeBuffer_.size() - writePos_);
+	if (rc < 0) {
+		perror("write");
+		return false;
+	}
 
-	buf_.clear();
-	socket_->read(buf_);
+	writePos_ += rc;
+
+	if (writePos_ == writeBuffer_.size()) {
+		writeBuffer_.clear();
+		writePos_ = 0;
+		startRead();
+	}
 
 	return true;
 }
 
-bool Redis::set(const BufferRef& key, const BufferRef& value)
+void NetMessageSocket::startRead()
 {
-	writeMessage("SET", key, value);
-	flush();
+	socketWatcher_.set(fd_, ev::READ);
+	socketWatcher_.start();
 
-	buf_.clear();
-	socket_->read(buf_);
+	if (socketTimer_.is_active())
+		socketTimer_.stop();
 
-	return true;
+	socketTimer_.start(30, 0);
 }
 
-void Redis::incr(const std::string& key)
+bool NetMessageSocket::handleRead()
 {
-	writeMessage("INCR", key);
-	flush();
+	char buf[4096];
+	ssize_t rc = ::read(fd_, buf, sizeof(buf));
 
-	buf_.clear();
-	socket_->read(buf_);
-}
+	if (rc < 0) {
+		perror("read");
+		return false;
+	} else if (rc == 0) {
+		debug("remote disconnected");
+		close();
+		return false;
+	} else {
+		readBuffer_.push_back(buf, rc);
+		reader_.parse();
 
-void Redis::decr(const std::string& key)
-{
-	writeMessage("DECR", key);
-	flush();
-
-	buf_.clear();
-	socket_->read(buf_);
-}
-
-bool Redis::set(const char* key, size_t keysize, const char* val, size_t valsize)
-{
-	writeMessage("SET", MemRef(key, keysize), MemRef(val, valsize));
-	flush();
-
-	buf_.clear();
-	socket_->read(buf_);
-
-	if (buf_ == "+OK\r\n")
+		if (reader_.state() == NetMessageReader::MESSAGE_END) {
+			receiveHook_(this);
+		} else {
+			debug("partial message received: %s (%d)", reader_.state_str(), reader_.state());
+		}
 		return true;
-
-	return false;
+	}
 }
 
-bool Redis::get(const char* key, size_t keysize, Buffer& val)
+void NetMessageSocket::writeArrayHeader(size_t numValues)
+{
+	NetMessageWriter::writeArrayHeader(writeBuffer_, numValues);
+	startWrite();
+}
+
+void NetMessageSocket::writeStatus(const std::string& value)
+{
+	NetMessageWriter::writeStatus(writeBuffer_, value.c_str());
+	startWrite();
+}
+
+void NetMessageSocket::writeError(const std::string& value)
+{
+	NetMessageWriter::writeError(writeBuffer_, value.c_str());
+	startWrite();
+}
+
+#if (1 == 0)
+bool NetMessageSocket::readMessage()
 {
 	writeMessage("GET", MemRef(key, keysize));
 	flush();
 
 	buf_.clear();
-	NetMessageParser parser(&buf_);
+	NetMessageReader parser(&buf_);
 
 	socket_->read(buf_);
 	parser.parse();
 
-	if (parser.state() != NetMessageParser::MESSAGE_END) {
+	if (parser.state() != NetMessageReader::MESSAGE_END) {
 		// protocol error
 		TRACE("protocol error: %d", parser.state());
 		return false;
@@ -583,7 +742,7 @@ bool Redis::get(const char* key, size_t keysize, Buffer& val)
 	}
 }
 
-ssize_t Redis::flush()
+ssize_t NetMessageSocket::flush()
 {
 	ssize_t n = socket_->write(buf_.data() + flushPos_, buf_.size() - flushPos_);
 
@@ -596,6 +755,5 @@ ssize_t Redis::flush()
 	}
 	return n;
 }
-
-// }}}
 #endif
+// }}}

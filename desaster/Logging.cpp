@@ -123,7 +123,7 @@ void Logging::setLogging(bool enable)
 	enabled_ = enable;
 }
 
-void Logging::debug(const char *fmt, ...)
+void Logging::debug(const char* fmt, ...)
 {
 	if (!checkEnabled())
 		return;
@@ -138,7 +138,7 @@ void Logging::debug(const char *fmt, ...)
 	printf(SD_DEBUG "%s: %s\n", prefix_.c_str(), buf);
 }
 
-void Logging::info(const char *fmt, ...)
+void Logging::info(const char* fmt, ...)
 {
 	if (!checkEnabled())
 		return;
@@ -153,7 +153,7 @@ void Logging::info(const char *fmt, ...)
 	printf(SD_INFO "%s: %s\n", prefix_.c_str(), buf);
 }
 
-void Logging::notice(const char *fmt, ...)
+void Logging::notice(const char* fmt, ...)
 {
 	if (!checkEnabled())
 		return;
@@ -168,7 +168,7 @@ void Logging::notice(const char *fmt, ...)
 	printf(SD_NOTICE "%s: %s\n", prefix_.c_str(), buf);
 }
 
-void Logging::error(const char *fmt, ...)
+void Logging::error(const char* fmt, ...)
 {
 	if (!checkEnabled())
 		return;
@@ -181,5 +181,15 @@ void Logging::error(const char *fmt, ...)
 	va_end(va);
 
 	printf(SD_ERR "%s: %s\n", prefix_.c_str(), buf);
+}
+
+void Logging::perror(const char* prefix)
+{
+	int rc = errno; // backup errno, in case it gets overridden until we actually read it.
+
+	if (!checkEnabled())
+		return;
+
+	printf(SD_ERR "%s: %s: %s\n", prefix_.c_str(), prefix, strerror(rc));
 }
 

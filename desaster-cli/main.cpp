@@ -24,8 +24,8 @@ int printHelp(const CLI::Params& args = CLI::Params()) // {{{
 		"  -h,--hostname=VALUE              [%s]\n"
 		"  -p,--port=VALUE                  [%d]\n"
 		"\n"
-		"  queue create=NAME[,RATE[,CEIL]]  Creates a new job queue.\n"
-		"  queue list                       Lists all available job queues.\n"
+		"  queue create NAME [RATE [CEIL]]  Creates a new job queue.\n"
+		"  queue index                      Lists all available job queues.\n"
 		"  queue show NAME                  Shows a given job queue in detail.\n"
 		"  queue rename FROM TO             Renames a job queue.\n"
 		"  queue destroy NAME [ALT]         Destroys a job queue, possibly requeuing\n"
@@ -161,7 +161,10 @@ int main(int argc, char* argv[]) {
 			command("cancel");
 
 	try {
-		return cli.evaluate(argc - 1, argv + 1);
+		cli.setupShell(std::string(getenv("HOME")) + "/.desaster-cli_history");
+		return argc != 1
+			? cli.evaluate(argc - 1, argv + 1)
+			: cli.shell();
 	} catch (CLI::NotFoundError& e) {
 		fprintf(stderr, "%s\n", e.what());
 		return 1;

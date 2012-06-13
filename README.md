@@ -145,3 +145,7 @@ a little further to combine it with the ruby glue code to actually handle our Ra
 
 You communicate via TCP/IP to the Desaster cluster, however, we at least provide
 an access API for Ruby (1.8 and 1.9 compatible) and C++.
+
+# References
+
+- Bully Algorithm, http://en.wikipedia.org/wiki/Bully_algorithm

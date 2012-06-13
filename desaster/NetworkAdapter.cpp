@@ -56,7 +56,7 @@ bool NetworkAdapter::start()
 		return false;
 	}
 
-	int rc = 0;
+	int rc = 1;
 #if defined(SO_REUSEADDR)
 	if (::setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &rc, sizeof(rc)) < 0) {
 		perror("setsockopt");
@@ -207,106 +207,22 @@ void NetworkAdapter::createJob(Connection* c, const char* arg)
 // {{{ NetworkAdapter::Connection
 NetworkAdapter::Connection::Connection(NetworkAdapter* adapter, int fd) :
 	adapter_(adapter),
-	fd_(fd),
-	watcher_(adapter->server().loop()),
-	timeout_(adapter->server().loop()),
-	messageCount_(0),
-	readBuffer_(),
-	readPos_(0),
-	parser_(&readBuffer_),
-	writeBuffer_(),
-	writePos_(0),
-	writer_()
+	socket_(new NetMessageSocket(adapter->server().loop(), fd, true)),
+	messageCount_(0)
 {
-	watcher_.set<Connection, &Connection::io>(this);
-	timeout_.set<Connection, &Connection::timeout>(this);
-
-	startRead();
-}
-
-void NetworkAdapter::Connection::startRead()
-{
-	watcher_.set(fd_, ev::READ);
-	watcher_.start();
-
-	if (timeout_.is_active())
-		timeout_.stop();
-
-	timeout_.start(30, 0);
-}
-
-void NetworkAdapter::Connection::startWrite()
-{
-	if (watcher_.is_active()) {
-		if (watcher_.events & ev::WRITE) // already watching for write-events?
-			return;
-
-		watcher_.stop();
-	}
-
-	watcher_.set(fd_, ev::WRITE);
-	watcher_.start();
-
-	if (timeout_.is_active())
-		timeout_.stop();
-
-	timeout_.start(30, 0);
+	socket_->setReceiveHook(std::bind(&NetworkAdapter::Connection::onMessage, this, std::placeholders::_1));
+	//socket_->setReceiveHook([&](NetMessageSocket*) { onMessage(0); });
 }
 
 NetworkAdapter::Connection::~Connection()
 {
-	if (fd_ >= 0)
-		::close(fd_);
-
+	delete socket_;
 	adapter_->unlink(this);
 }
 
-void NetworkAdapter::Connection::io(ev::io&, int revents)
+void NetworkAdapter::Connection::onMessage(NetMessageSocket* socket)
 {
-	timeout_.stop();
-
-	if (revents & ev::READ)
-		if (!handleRead())
-			return;
-
-	if (revents & ev::WRITE)
-		if (!handleWrite())
-			return;
-
-	timeout_.start(30, 0);
-}
-
-bool NetworkAdapter::Connection::handleRead()
-{
-	char buf[4096];
-	ssize_t rv = ::read(fd_, buf, sizeof(buf));
-
-	if (rv < 0) {
-		perror("read");
-		delete this;
-		return false;
-	} else if (rv == 0) {
-		adapter_->debug("client disconnected.");
-		delete this;
-		return false;
-	} else {
-		readBuffer_.push_back(buf, rv);
-
-		parser_.parse();
-
-		if (parser_.state() == NetMessageParser::MESSAGE_END) {
-			handleCommand();
-		} else {
-			adapter_->debug("parsed partial message up to: %s (%d)", parser_.state_str(), parser_.state());
-		}
-
-		return true;
-	}
-}
-
-void NetworkAdapter::Connection::handleCommand()
-{
-	NetMessage* message = parser_.message();
+	NetMessage* message = socket_->message();
 
 	if (!message->isArray()) {
 		writeError("Wrong message type");
@@ -322,31 +238,13 @@ void NetworkAdapter::Connection::handleCommand()
 		else if (arg.isNil())
 			args[i] = nullptr;
 		else {
-			writeError("Wrong message type");
+			socket_->writeError("Wrong message type");
 			return;
 		}
 	}
 }
 
-bool NetworkAdapter::Connection::handleWrite()
-{
-	ssize_t rv = ::write(fd_, writeBuffer_.data() + writePos_, writeBuffer_.size() - writePos_);
-	if (rv < 0) {
-		perror("write");
-		return false;
-	}
-
-	writePos_ += rv;
-
-	if (writePos_ == writeBuffer_.size()) {
-		writeBuffer_.clear();
-		writePos_ = 0;
-		startRead();
-	}
-	return true;
-}
-
-void NetworkAdapter::Connection::timeout(ev::timer&, int revents)
+void NetworkAdapter::Connection::onTimeout(NetMessageSocket* socket)
 {
 	adapter_->info("Connection timed out.");
 	delete this;
@@ -361,8 +259,7 @@ void NetworkAdapter::Connection::writeStatus(const char* fmt, ...)
 	vsnprintf(buf, sizeof(buf), fmt, va);
 	va_end(va);
 
-	NetMessageWriter::writeStatus(writeBuffer_, buf);
-	startWrite();
+	socket_->writeStatus(buf);
 }
 
 void NetworkAdapter::Connection::writeError(const char* fmt, ...)
@@ -374,7 +271,6 @@ void NetworkAdapter::Connection::writeError(const char* fmt, ...)
 	vsnprintf(buf, sizeof(buf), fmt, va);
 	va_end(va);
 
-	NetMessageWriter::writeError(writeBuffer_, buf);
-	startWrite();
+	socket_->writeError(buf);
 }
 // }}}

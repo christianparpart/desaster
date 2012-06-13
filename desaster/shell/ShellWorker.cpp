@@ -36,10 +36,10 @@ void ShellWorker::setupChild()
 	dup2(output_.writeFd(), STDERR_FILENO);
 
 	char** argv = new char* [2];
-	argv[0] = const_cast<char*>(job()->text().c_str());
+	argv[0] = const_cast<char*>(job()->payload().c_str());
 	argv[1] = nullptr;
 
-	execvp(job()->text().c_str(), argv);
+	execvp(job()->payload().c_str(), argv);
 
 	// only reached on error.
 	perror("execvp");

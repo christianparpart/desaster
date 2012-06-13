@@ -59,7 +59,7 @@ bool Server::start(int argc, char* argv[])
 {
 	static const struct option long_options[] = {
 		{ "help", no_argument, nullptr, 'h' },
-		{ "daemonize", required_argument, nullptr, 'd' },
+		{ "no-fork", required_argument, nullptr, 'n' },
 		{ "log", required_argument, nullptr, 'l' },
 		{ "port", required_argument, nullptr, 'p' },
 		{ "bind-address", required_argument, nullptr, 'a' },
@@ -78,7 +78,7 @@ bool Server::start(int argc, char* argv[])
 	// cluster adapter
 	std::string clusterAddress;
 	std::string clusterBrdAddress;
-	bool daemonize = false;
+	bool daemonize = true;
 
 	for (bool done = false; !done;) {
 		int long_index = 0;
@@ -88,8 +88,8 @@ bool Server::start(int argc, char* argv[])
 			case 'h':
 				printHelp();
 				return false;
-			case 'd':
-				daemonize = true;
+			case 'n':
+				daemonize = false;
 				break;
 			case 'l':
 				logFileName_ = optarg;
@@ -259,7 +259,7 @@ void Server::printHelp()
 		" usage: desaster [options ...]\n"
 		"\n"
 		" -?, -h, --help                         prints this help\n"
-		" -d, --daemonize                        fork into background\n"
+		" -n, --no-fork                          do not fork into background (daemon mode)\n"
 		" -l, --log=PATH                         path to log file [%s]\n"
 		"\n"
 		" -a, --bind-address=IPADDR              local IP address to bind to [%s]\n"

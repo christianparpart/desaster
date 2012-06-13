@@ -1,5 +1,7 @@
 #include <desaster/CLI.h>
 #include <cstring>
+#include <readline/readline.h>
+#include <readline/history.h>
 
 // TODO
 // - support interactive shell via readline() or (client-)compatible.
@@ -9,7 +11,10 @@
 namespace desaster {
 
 // {{{ CLI
-CLI::CLI()
+CLI::CLI() :
+	groups_(),
+	shellHistoryFilename_(),
+	exitShell_(false)
 {
 }
 
@@ -64,6 +69,69 @@ int CLI::evaluate(int argc, char* argv[])
 	}
 
 	throw NotFoundError();
+}
+
+int CLI::evaluate(const std::string& cmdline)
+{
+	std::vector<std::string> tokens;
+	char* line_ = strdup(cmdline.c_str());
+	char* line = line_;
+	char* saveptr;
+
+	for (char* token; (token = strtok_r(line, " \t", &saveptr)) != nullptr; line = nullptr)
+		tokens.push_back(token);
+
+	int argc = tokens.size();
+	char** argv = new char*[argc + 1];
+	for (int i = 0; i < argc; ++i)
+		argv[i] = const_cast<char*>(tokens[i].c_str());
+
+	try {
+		int rc = evaluate(argc, argv);
+		free(line_);
+		return rc;
+	} catch (...) {
+		free(line_);
+		throw;
+	}
+}
+
+void CLI::setupShell(const std::string& historyFileName)
+{
+	shellHistoryFilename_ = historyFileName;
+	read_history(historyFileName.c_str());
+}
+
+void CLI::exitShell()
+{
+	exitShell_ = true;
+}
+
+int CLI::shell()
+{
+	for (exitShell_ = false; !exitShell_; ) {
+		char* cmdline = readline("desaster> ");
+		if (!cmdline) {
+			printf("\n");
+			return 0;
+		}
+
+		if (!shellHistoryFilename_.empty())
+			add_history(cmdline);
+
+		try {
+			evaluate(cmdline);
+		} catch (MultipleCommandsMatchError& e) {
+			printf("%s\n", e.what());
+		} catch (NotFoundError& e) {
+			printf("%s\n", e.what());
+		}
+
+		if (!shellHistoryFilename_.empty())
+			write_history(shellHistoryFilename_.c_str());
+	}
+
+	return 0;
 }
 // }}}
 // {{{ CLI::Group

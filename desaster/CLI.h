@@ -31,12 +31,20 @@ public:
 	std::list<Group*>::iterator begin() { return groups_.begin(); }
 	std::list<Group*>::iterator end() { return groups_.end(); }
 
-	int evaluate(int argc, char* argv[]);
-
 	Group* find(const std::string& groupName);
+
+	int evaluate(int argc, char* argv[]);
+	int evaluate(const std::string& cmdline);
+
+	// interactive shell
+	void setupShell(const std::string& historyFileName);
+	int shell();
+	void exitShell();
 
 private:
 	std::list<Group*> groups_;
+	std::string shellHistoryFilename_;
+	bool exitShell_;
 };
 
 class CLI::Group

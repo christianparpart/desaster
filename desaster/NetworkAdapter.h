@@ -71,18 +71,8 @@ private:
 class NetworkAdapter::Connection { // {{{
 private:
 	NetworkAdapter* adapter_;
-	int fd_;
-	ev::io watcher_;
-	ev::timer timeout_;
+	NetMessageSocket* socket_;
 	unsigned long long messageCount_;
-
-	Buffer readBuffer_;
-	size_t readPos_;
-	NetMessageParser parser_;
-
-	Buffer writeBuffer_;
-	size_t writePos_;
-	NetMessageWriter writer_;
 
 public:
 	Connection(NetworkAdapter * server, int fd);
@@ -93,41 +83,31 @@ public:
 	inline void writeArrayHeader(size_t arraySize);
 	template<typename... Args> void writeMessage(Args... args);
 	template<typename Arg> void writeValue(Arg arg);
+
 	void writeError(const char* fmt, ...);
 	void writeStatus(const char* fmt, ...);
 
 private:
-	void io(ev::io& io, int revents);
-	void timeout(ev::timer& timer, int revents);
-
-	void startRead();
-	bool handleRead();
-
-	void startWrite();
-	bool handleWrite();
-
-	void handleCommand();
+	void onMessage(NetMessageSocket* socket);
+	void onTimeout(NetMessageSocket* socket);
 }; // }}}
 
 // {{{ inlines
 inline void NetworkAdapter::Connection::writeArrayHeader(size_t arraySize)
 {
-	NetMessageWriter::writeArrayHeader(writeBuffer_, arraySize);
-	startWrite();
+	socket_->writeArrayHeader(arraySize);
 }
 
 template<typename... Args>
 inline void NetworkAdapter::Connection::writeMessage(Args... args)
 {
-	NetMessageWriter::write(writeBuffer_, args...);
-	startWrite();
+	socket_->writeMessage(args...);
 }
 
 template<typename Arg>
 inline void NetworkAdapter::Connection::writeValue(Arg arg)
 {
-	NetMessageWriter::writeValue(writeBuffer_, arg);
-	startWrite();
+	socket_->writeValue(arg);
 }
 // }}}
 

@@ -2,9 +2,11 @@
 #define desaster_NetMessage_h
 
 #include <desaster/Buffer.h>
+#include <desaster/Logging.h>
 
 #include <string>
-#include <sstream>
+#include <functional>
+#include <ev++.h>
 
 class NetMessage // {{{
 {
@@ -56,6 +58,8 @@ public:
 	inline size_t size() const { return number_; }
 
 private:
+	void clear();
+
 	Type type_;
 	long long number_;
 	union {
@@ -64,8 +68,7 @@ private:
 	};
 };
 // }}}
-
-class NetMessageParser // {{{
+class NetMessageReader // {{{
 {
 public:
 	enum State {
@@ -91,8 +94,8 @@ public:
 	};
 
 public:
-	explicit NetMessageParser(const Buffer* buf);
-	~NetMessageParser();
+	explicit NetMessageReader(const Buffer* buf);
+	~NetMessageReader();
 
 	void parse();
 
@@ -145,7 +148,6 @@ private:
 	ParseContext* currentContext() const { return currentContext_; }
 	void popContext();
 }; // }}}
-
 // {{{ NetMessageWriter
 /*! writes a raw NetMessage.
  *
@@ -177,13 +179,12 @@ public:
 
 	template<typename Output> static void writeStatus(Output& result, const char* arg);
 	template<typename Output> static void writeError(Output& result, const char* arg);
-}; // }}}
-
+};
 // {{{ NetMessageWriter impl
 template<typename Output>
 void NetMessageWriter::writeArrayHeader(Output& output, size_t arraySize)
 {
-	output << '*' << arraySize << "\r\n";
+	output << static_cast<char>(NetMessage::Array) << arraySize << "\r\n";
 }
 
 template<typename Output, typename... Args>
@@ -205,7 +206,7 @@ void NetMessageWriter::writeValue(Output& output, int arg)
 {
 	char buf[80];
 	int n = std::snprintf(buf, sizeof(buf), "%d", arg);
-	output << '$' << n << "\r\n" << arg << "\r\n";
+	output << static_cast<char>(NetMessage::String) << n << "\r\n" << arg << "\r\n";
 }
 
 template<typename Output>
@@ -213,7 +214,7 @@ void NetMessageWriter::writeValue(Output& output, size_t arg)
 {
 	char buf[80];
 	int n = snprintf(buf, sizeof(buf), "%zu", arg);
-	output << '$' << n << "\r\n" << arg << "\r\n";
+	output << static_cast<char>(NetMessage::String) << n << "\r\n" << arg << "\r\n";
 }
 
 template<typename Output>
@@ -221,26 +222,26 @@ void NetMessageWriter::writeValue(Output& output, unsigned long long arg)
 {
 	char buf[80];
 	int n = snprintf(buf, sizeof(buf), "%llu", arg);
-	output << '$' << n << "\r\n" << arg << "\r\n";
+	output << static_cast<char>(NetMessage::String) << n << "\r\n" << arg << "\r\n";
 }
 
 template<typename Output>
 void NetMessageWriter::writeValue(Output& output, const char* arg)
 {
 	int n = strlen(arg);
-	output << '$' << n << "\r\n" << arg << "\r\n";
+	output << static_cast<char>(NetMessage::String) << n << "\r\n" << arg << "\r\n";
 }
 
 template<typename Output>
 void NetMessageWriter::writeValue(Output& output, const std::string& arg)
 {
-	output << '$' << arg.size() << "\r\n" << arg << "\r\n";
+	output << static_cast<char>(NetMessage::String) << arg.size() << "\r\n" << arg << "\r\n";
 }
 
 template<typename Output>
 void NetMessageWriter::writeValue(Output& output, const MemRef& arg)
 {
-	output.push_back("$");
+	output.push_back(static_cast<char>(NetMessage::String));
 	output.push_back(arg.second);
 	output.push_back("\r\n");
 	output.push_back(arg.first, arg.second);
@@ -250,14 +251,104 @@ void NetMessageWriter::writeValue(Output& output, const MemRef& arg)
 template<typename Output>
 void NetMessageWriter::writeStatus(Output& output, const char* arg)
 {
-	output << NetMessage::Status << arg << "\r\n";
+	output << static_cast<char>(NetMessage::Status) << arg << "\r\n";
 }
 
 template<typename Output>
 void NetMessageWriter::writeError(Output& output, const char* arg)
 {
-	output << NetMessage::Error << arg << "\r\n";
+	output << static_cast<char>(NetMessage::Error) << arg << "\r\n";
 }
 // }}}
+// }}}
+// {{{ NetMessageSocket
+class NetMessageSocket :
+	public Logging
+{
+public:
+	class ConnectError : public std::exception {
+		std::string msg_;
+	public:
+		explicit ConnectError(const std::string& msg) : msg_(msg) {}
+		explicit ConnectError(const std::string& prefix, int rc) : msg_(prefix + ": " + strerror(rc)) {}
+		virtual ~ConnectError() throw() {}
+		const char* what() const throw() { return msg_.c_str(); }
+	};
 
+private:
+	ev::loop_ref loop_;
+	ev::io socketWatcher_;
+	ev::timer socketTimer_;
+	int fd_;
+	bool autoClose_;
+
+	Buffer writeBuffer_;
+	size_t writePos_;
+
+	Buffer readBuffer_;
+	size_t readPos_;
+	NetMessageReader reader_;
+
+	std::function<void(NetMessageSocket*)> receiveHook_;
+
+public:
+	/*! initializes a net-mesage object.
+	 * \param fd file descriptor to the remote end. must be nonblocking already.
+	 */
+	NetMessageSocket(ev::loop_ref loop, int fd, bool autoClose);
+	NetMessageSocket(ev::loop_ref loop, const std::string& hostname, int port);
+	~NetMessageSocket();
+
+	void start();
+	void close();
+	bool isClosed() const { return fd_ >= 0; }
+
+	int socketFd() const { return fd_; }
+
+	// reader
+
+	/*! returns true if a complete message has been received and parsed, otherwise more input is needed. */
+	bool messageAvailable() const;
+
+	NetMessage* message() const { return reader_.message(); }
+
+	void setReceiveHook(const std::function<void(NetMessageSocket*)>& hook) { receiveHook_ = hook; }
+
+	// writer
+
+	template<typename T, typename... Args>
+	void writeMessage(T arg1, Args... args);
+
+	void writeStatus(const std::string& value);
+	void writeError(const std::string& value);
+
+	void writeArrayHeader(size_t numValues);
+
+	void writeValue(const std::string& value);
+	void writeValue(const Buffer& value);
+	void writeValue(const BufferRef& value);
+	void writeValue(long long value);
+	void writeValue(unsigned long long value);
+	void writeNilValue();
+
+private:
+	void open(const std::string& hostname, int port);
+
+	void io(ev::io& io, int revents);
+	void timeout(ev::timer& timer, int revents);
+	void startWrite();
+	bool handleWrite();
+	void startRead();
+	bool handleRead();
+};
+
+// {{{ inlines
+template<typename T, typename... Args>
+inline void NetMessageSocket::writeMessage(T arg1, Args... args)
+{
+	NetMessageWriter::write(writeBuffer_, arg1, args...);
+	startWrite();
+}
+// }}}
+// }}}
 #endif

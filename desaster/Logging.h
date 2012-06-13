@@ -27,6 +27,7 @@ public:
 	void info(const char *fmt, ...);
 	void notice(const char *fmt, ...);
 	void error(const char *fmt, ...);
+	void perror(const char *prefix);
 
 private:
 	static void initialize();
